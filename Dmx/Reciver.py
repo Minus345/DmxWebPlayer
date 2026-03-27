@@ -1,39 +1,56 @@
+import queue
 import time
+from threading import Thread
+
 import sacn
 
 from Dmx.Frame import Frame
 from Dmx.Scene import Scene
 
 
-def createScene(name: str):
-    CurScene = Scene(name)
-    return CurScene
+class DmxReceiver:
+    threadingQueue: queue.Queue
+    scene: Scene
+    receiver: sacn.sACNreceiver
 
+    _poisonPill = object()
 
-def receive(scene: Scene):
-    # provide an IP-Address to bind to if you want to receive multicast packets from a specific interface
-    receiver = sacn.sACNreceiver()
-    receiver.start()  # start the receiving thread
+    def __init__(self, name: str):
+        self.threadingQueue = queue.Queue()
+        self.scene = Scene(name)
+        self.receiver = sacn.sACNreceiver(bind_address='192.168.188.20')
 
-    diffTime = time.time()
+    def startRecording(self):
+        """ starts the reiver in a separate thread """
+        print("start recording")
+        runningThread = Thread(target=self.receiverRunner)
+        runningThread.start()
 
-    @receiver.listen_on('universe', universe=1
-    def callback(packet):  # packet type: sacn.DataPacket
-        if packet.dmxStartCode == 0x00:  # ignore non-DMX-data packets
-            curTime = time.time()
-            print(packet.dmxData)
-            scene.addFrame(Frame(packet.dmxData, diffTime - curTime))
+    def receiverRunner(self):
+        @self.receiver.listen_on('universe', universe=1)
+        def callback(packet):  # packet type: sacn.DataPacket
+            if packet.dmxStartCode == 0x00:  # ignore non-DMX-data packets
+                curTime = time.time()
+                print(packet.dmxData)
 
-    # optional: if multicast is desired, join with the universe number as parameter
-    receiver.join_multicast(1)
+                if len(self.scene.frameList) == 0:
+                    diffTime = curTime
+                else:
+                    diffTime = curTime - self.scene.frameList[-1].timestamp  ## timestamp from last Frame
 
-    time.sleep(10)  # receive for 10 seconds
+                self.scene.addFrame(Frame(packet.dmxData, curTime, diffTime))
 
-    # optional: if multicast was previously joined
-    receiver.leave_multicast(1)
+        self.receiver.start()
+        self.receiver.join_multicast(1)
 
-    receiver.stop()
+        while True:
+            if self.threadingQueue.get() == self._poisonPill:
+                break
 
+        self.receiver.leave_multicast(1)
+        self.receiver.stop()
+        self.threadingQueue.put(self.scene)
 
-if __name__ == "__main__":
-    receive()
+    def stopRecording(self):
+        print("stopping")
+        self.threadingQueue.put(self._poisonPill)

@@ -1,13 +1,15 @@
+from typing import List
+
 from Dmx.Frame import Frame
 
 
 class Scene:
-    name = str
+    name: str
     running = False
-    frameList = [Frame]
+    frameList: List[Frame] = list()
 
-    def __init__(self,name):
+    def __init__(self, name):
         self.name = name
 
-    def addFrame(self,frame:Frame):
+    def addFrame(self, frame: Frame):
         self.frameList.append(frame)
