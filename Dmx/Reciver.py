@@ -34,9 +34,11 @@ class DmxReceiver:
                 print(packet.dmxData)
 
                 if len(self.scene.frameList) == 0:
-                    diffTime = curTime
+                    diffTime = 0
                 else:
                     diffTime = curTime - self.scene.frameList[-1].timestamp  ## timestamp from last Frame
+
+                print(diffTime)
 
                 self.scene.addFrame(Frame(packet.dmxData, curTime, diffTime))
 
@@ -49,8 +51,40 @@ class DmxReceiver:
 
         self.receiver.leave_multicast(1)
         self.receiver.stop()
-        self.threadingQueue.put(self.scene)
 
-    def stopRecording(self):
+    def stopRecording(self) -> Scene:
         print("stopping")
         self.threadingQueue.put(self._poisonPill)
+        return self.scene
+
+
+class DmxPlayback:
+    scene: Scene
+    sender: sacn.sACNsender
+    running = False
+
+    def __init__(self, scene: Scene):
+        self.sender = sacn.sACNsender(source_name="DmxWebPlayer")
+        self.scene = scene
+
+    def startPlayback(self):
+        self.sender.start()
+        self.sender.activate_output(2)
+        self.sender[2].multicast = True
+        self.running = True
+
+        playbackThread = Thread(target=self.playbackRunner)
+        playbackThread.start()
+
+    def playbackRunner(self):
+        print("start playback")
+        while self.running:
+            for frame in self.scene.frameList:
+                print(frame.timeAfterPrevious)
+                print(frame.DmxUniverseData)
+                time.sleep(frame.timeAfterPrevious)
+                self.sender[2].dmx_data = frame.DmxUniverseData
+
+    def stopPlayback(self):
+        self.running = False
+        self.sender.stop()
