@@ -1,9 +1,8 @@
-from traceback import print_tb
 from typing import List
 
 from flask import Flask, request
 from Dmx import Reciver
-from Dmx import Scene
+from Dmx.Scene import Scene
 from flask import render_template
 
 app = Flask(__name__)
@@ -19,10 +18,16 @@ def index():
     if request.method == 'POST':
         if request.form.get('Start-Recording') == 'Start-Recording':
             startReceiving()
-            return render_template('index.html', var="Recording running...")
+            return render_template('index.html', sceneList=sceneList)
     elif request.form == 'GET':
         print("get")
-    return render_template('index.html', var="hi")
+    return render_template('index.html', sceneList=sceneList)
+
+
+@app.route('/playback', methods=['GET', 'POST'])
+def playback():
+    print(request.form)
+    return render_template('index.html', sceneList=sceneList)
 
 
 # @app.route('/startReceiving')
@@ -51,6 +56,15 @@ def startPlayback():
 def stopPlayback():
     curDmxSender.stopPlayback()
     return 'stopPlayback'
+
+
+@app.route('/setup')
+def setup():
+    sceneList.append(Scene("a"))
+    sceneList.append(Scene("b"))
+    sceneList.append(Scene("c"))
+    print(sceneList)
+    return 'setup'
 
 
 if __name__ == '__main__':

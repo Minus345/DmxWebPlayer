@@ -1,20 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/html">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>DmxWebPlayer</title>
 </head>
 <body>
-<p>Hello World {{ var }}</p>
-<form method="post" action="/">
-    <label for="sceneName"></label>
-    <input type="submit" name="Start-Recording" value="Start-Recording">
+<p>DmxWebPlayer</p>
+
+<form action="/" method="POST">
+    <label for="sceneRecording">New Scene Name:</label>
+    <input type="text" id="sceneRecording" name="sceneName">
+    <input type="submit" value="Start Recording">
+</form>
+<form action="/" method="POST">
+    <label for="sceneRecordingStop">Currently Recording: {{ curRecording }}</label>
+    <button type="submit" name="status" value="stop">Stop Recording</button>
 </form>
 
-<form action="/">
-    <label for="sceneName"></label>
-    <input type="text" id="sceneName" name="sceneName">
-    <input type="submit" value="Submit">
-</form>
+<br>
+
+{% for scene in sceneList %}
+    <form action="/playback" method="POST">
+        <label for="scene_name"><em>Scene Name: </em><strong>{{ scene.name }}</strong>
+            <em>Running: </em><strong>{{ scene.running }}</strong></label>
+        <button type="submit" name="start" value="{{ scene.name }}">Start</button>
+        <button type="submit" name="stop" value="{{ scene.name }}">Stop</button>
+    </form>
+{% endfor %}
 </body>
 </html>
