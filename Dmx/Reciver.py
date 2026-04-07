@@ -1,5 +1,10 @@
-import queue
+import os
+import signal
+import sqlite3
 import time
+from logging import setLogRecordFactory
+from multiprocessing import Process
+from sqlite3 import Connection
 from threading import Thread
 
 import sacn
@@ -9,53 +14,81 @@ from Dmx.Scene import Scene
 
 
 class DmxReceiver:
-    threadingQueue: queue.Queue
-    scene: Scene
-    receiver: sacn.sACNreceiver
+    running = False
+    db: Connection
+    REC_NAME = "rec"
 
-    _poisonPill = object()
+    def handlerStartRecordingDmx(self, signum, frame):
+        """SIGUSR1"""
+        ## get scene name from db or shutdown request
+        scene = Scene(name)
 
-    def __init__(self, name: str):
-        self.threadingQueue = queue.Queue()
-        self.scene = Scene(name)
-        self.receiver = sacn.sACNreceiver(bind_address='192.168.188.20')
+        ## start recording
+        self.recordDmx(scene)
 
-    def startRecording(self):
-        """ starts the reiver in a separate thread """
-        print("start recording")
-        runningThread = Thread(target=self.receiverRunner)
-        runningThread.start()
+    def handlerStopRecordingDmx(self, signum, frame):
+        """SIGUSR2"""
+        ## stop recording
+        ## put scene in db
 
-    def receiverRunner(self):
-        @self.receiver.listen_on('universe', universe=1)
+    def __init__(self, databasePath: str):
+        runningProcess = Process(target=self.setupProcess)
+        ## init db
+        self.db = sqlite3.connect(
+            databasePath,
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
+        self.db.row_factory = sqlite3.Row
+
+        cur = self.db.cursor()
+
+        #TODO was tun wenn noch nie erstellt wurde
+        cur.execute(
+            "DELETE FROM util WHERE name = ?", (self.REC_NAME,))
+        self.db.commit()
+
+        data = (self.REC_NAME, os.getpid(), "NULL")
+        cur.execute(
+            "INSERT INTO util VALUES (?, ?, ?)", data)
+        self.db.commit()
+
+        self.db.close()
+        runningProcess.start()
+
+    def setupProcess(self):
+        signal.signal(signal.SIGUSR1, self.handlerStartRecordingDmx)
+        signal.signal(signal.SIGUSR2, self.handlerStopRecordingDmx)
+
+        while True:
+            ## wait until USR1 is signaled
+            signal.sigwait([signal.SIGUSR1])
+
+    def recordDmx(self, scene: Scene):
+        receiver = sacn.sACNreceiver(bind_address='192.168.188.20')
+
+        @receiver.listen_on('universe', universe=1)
         def callback(packet):  # packet type: sacn.DataPacket
             if packet.dmxStartCode == 0x00:  # ignore non-DMX-data packets
                 curTime = time.time()
                 print(packet.dmxData)
 
-                if len(self.scene.frameList) == 0:
+                if len(scene.frameList) == 0:
                     diffTime = 0
                 else:
-                    diffTime = curTime - self.scene.frameList[-1].timestamp  ## timestamp from last Frame
+                    diffTime = curTime - scene.frameList[-1].timestamp  ## timestamp from last Frame
 
                 print(diffTime)
 
-                self.scene.addFrame(Frame(packet.dmxData, curTime, diffTime))
+                scene.addFrame(Frame(packet.dmxData, curTime, diffTime))
 
-        self.receiver.start()
-        self.receiver.join_multicast(1)
+        receiver.start()
+        receiver.join_multicast(1)
 
-        while True:
-            if self.threadingQueue.get() == self._poisonPill:
-                break
+        ## wait until USR2 is signaled aka stop Recording
+        signal.sigwait([signal.SIGUSR2])
 
-        self.receiver.leave_multicast(1)
-        self.receiver.stop()
-
-    def stopRecording(self) -> Scene:
-        print("stopping")
-        self.threadingQueue.put(self._poisonPill)
-        return self.scene
+        receiver.leave_multicast(1)
+        receiver.stop()
 
 
 class DmxPlayback:

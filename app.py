@@ -2,7 +2,9 @@ import os
 from selectors import SelectSelector
 from typing import List
 
-from flask import Flask, request, g
+from flask import Flask, request, g, current_app
+
+import Dmx.Reciver
 from Dmx import Reciver
 from Dmx.Scene import Scene
 from flask import render_template
@@ -20,6 +22,8 @@ os.makedirs(app.instance_path, exist_ok=True)
 import db
 
 db.init_app(app)
+
+Dmx.Reciver.DmxReceiver(app.config['DATABASE'])
 
 sceneList: List[Scene] = list()
 curRecording = False
@@ -78,15 +82,19 @@ def setup():
     sceneList.append(Scene("c"))
     print(sceneList)
     cur = get_db().cursor()
-    cur.execute("""INSERT INTO state VALUES('b',1)""")
+    cur.execute("""INSERT INTO state
+                   VALUES ('b', 1)""")
     get_db().commit()
     get_db().close()
     return 'setup'
 
+
 @app.route('/get')
 def get():
     cur = get_db().cursor()
-    res = cur.execute("""SELECT * FROM state WHERE status == 'a'""")
+    res = cur.execute("""SELECT *
+                         FROM state
+                         WHERE status == 'a'""")
     b = res.fetchone()
     print(b.keys())
     print(b['status'])
