@@ -2,37 +2,50 @@ import os
 import signal
 import sqlite3
 import time
-from logging import setLogRecordFactory
-from multiprocessing import Process
+import multiprocessing as mp
+from os import pidfd_open
 from sqlite3 import Connection
 from threading import Thread
 
 import sacn
 
-from Dmx.Frame import Frame
-from Dmx.Scene import Scene
+from Dmx.StoreDmxData import Scene, Frame
 
 
 class DmxReceiver:
-    running = False
     db: Connection
     REC_NAME = "rec"
+    curRecScene: Scene
 
-    def handlerStartRecordingDmx(self, signum, frame):
+    def dummyHandler(self, signum, frame):
+        pass
+
+    def handlerStartRecordingDmx(self):
         """SIGUSR1"""
         ## get scene name from db or shutdown request
-        scene = Scene(name)
+        cur = self.db.cursor()
+        name = cur.execute("""SELECT scene
+                              FROM util
+                              WHERE name == 'rec'""").fetchone()['scene']
+        self.curRecScene = Scene(name)
 
         ## start recording
-        self.recordDmx(scene)
+        print("[REC] start recording: " + name)
+        self.recordDmx()
 
-    def handlerStopRecordingDmx(self, signum, frame):
+    def handlerStopRecordingDmx(self):
         """SIGUSR2"""
-        ## stop recording
+        print("[REC] stop recording")
         ## put scene in db
+        self.curRecScene.putSceneInDb(self.db)
 
     def __init__(self, databasePath: str):
-        runningProcess = Process(target=self.setupProcess)
+        # TODO Sollte nur einmal gesetzt werden:
+        mp.set_start_method('fork')
+        runningProcess = mp.Process(target=self.setupProcess, daemon=True, args=(databasePath,))
+        runningProcess.start()
+
+    def setupProcess(self, databasePath: str):
         ## init db
         self.db = sqlite3.connect(
             databasePath,
@@ -42,7 +55,7 @@ class DmxReceiver:
 
         cur = self.db.cursor()
 
-        #TODO was tun wenn noch nie erstellt wurde
+        # TODO was tun wenn noch nie erstellt wurde
         cur.execute(
             "DELETE FROM util WHERE name = ?", (self.REC_NAME,))
         self.db.commit()
@@ -52,18 +65,15 @@ class DmxReceiver:
             "INSERT INTO util VALUES (?, ?, ?)", data)
         self.db.commit()
 
-        self.db.close()
-        runningProcess.start()
-
-    def setupProcess(self):
-        signal.signal(signal.SIGUSR1, self.handlerStartRecordingDmx)
-        signal.signal(signal.SIGUSR2, self.handlerStopRecordingDmx)
+        signal.signal(signal.SIGUSR1, self.dummyHandler)
+        signal.signal(signal.SIGUSR2, self.dummyHandler)
 
         while True:
-            ## wait until USR1 is signaled
+            ## wait until SIGUSR1 is signaled
             signal.sigwait([signal.SIGUSR1])
+            self.handlerStartRecordingDmx()
 
-    def recordDmx(self, scene: Scene):
+    def recordDmx(self):
         receiver = sacn.sACNreceiver(bind_address='192.168.188.20')
 
         @receiver.listen_on('universe', universe=1)
@@ -72,20 +82,21 @@ class DmxReceiver:
                 curTime = time.time()
                 print(packet.dmxData)
 
-                if len(scene.frameList) == 0:
+                if len(self.curRecScene.frameList) == 0:
                     diffTime = 0
                 else:
-                    diffTime = curTime - scene.frameList[-1].timestamp  ## timestamp from last Frame
+                    diffTime = curTime - self.curRecScene.frameList[-1].timestamp  ## timestamp from last Frame
 
                 print(diffTime)
 
-                scene.addFrame(Frame(packet.dmxData, curTime, diffTime))
+                self.curRecScene.addFrame(Frame(packet.dmxData, curTime, diffTime))
 
         receiver.start()
         receiver.join_multicast(1)
 
         ## wait until USR2 is signaled aka stop Recording
         signal.sigwait([signal.SIGUSR2])
+        self.handlerStopRecordingDmx()
 
         receiver.leave_multicast(1)
         receiver.stop()

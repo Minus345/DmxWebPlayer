@@ -1,4 +1,5 @@
 import os
+import signal
 from selectors import SelectSelector
 from typing import List
 
@@ -6,7 +7,7 @@ from flask import Flask, request, g, current_app
 
 import Dmx.Reciver
 from Dmx import Reciver
-from Dmx.Scene import Scene
+from Dmx.StoreDmxData import Scene
 from flask import render_template
 
 from db import get_db
@@ -30,25 +31,44 @@ curRecording = False
 global curDmxReceiver
 global curDmxSender
 
+# TODO SIGHILD abfangen
+
+REC_NAME = "rec"
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     print(request.form)
     if request.method == 'POST':
+
+        cur = get_db().cursor()
+        pidReceiverProcess = cur.execute("""SELECT pid
+                                            FROM util
+                                            WHERE name == ?""", (REC_NAME,)).fetchone()['pid']
+
         if request.form.get('sceneName') is not None:
             sceneName = request.form.get('sceneName')
+            #scnenName is empty
             if sceneName == '':
                 return render_template('sceneCreationError.html', error="No scene name provided")
 
-            global curDmxReceiver
-            curDmxReceiver = Reciver.DmxReceiver(sceneName)
-            curDmxReceiver.startRecording()
+            #scnenName already exists
+            exists = cur.execute("""SELECT COUNT(1)
+                                    FROM frame
+                                    WHERE scenename = ?""", (sceneName,)).fetchone()[0]
+            if exists == 1:
+                return render_template('sceneCreationError.html', error="Scene already exists")
+
+            cur.execute("""UPDATE util
+                           SET scene = ?
+                           WHERE name = ?""", (sceneName, REC_NAME))
+            get_db().commit()
+            # start recording
+            os.kill(pidReceiverProcess, signal.SIGUSR1)
 
         elif request.form.get('status') == 'stop':
-            if 'curDmxReceiver' in globals():
-                sceneList.append(curDmxReceiver.stopRecording())
-            else:
-                return render_template('sceneCreationError.html', error='DmxReceiver is not defined')
+            # stop recording
+            os.kill(pidReceiverProcess, signal.SIGUSR2)
 
     elif request.form == 'GET':
         print("get")
