@@ -21,8 +21,8 @@
 
 {% for scene in sceneList %}
     <form action="/playback" method="POST">
-        <label for="scene_name"><em>Scene Name: </em><strong>{{ scene.name }}</strong>
-            <em>Running: </em><strong>{{ scene.running }}</strong></label>
+        <label for="scene_name"><em>Scene Name: </em><strong>{{ scene }}</strong>
+            <!---   <em>Running: </em><strong>{{ scene.running }}</strong>--></label>
         <button type="submit" name="start" value="{{ scene.name }}">Start</button>
         <button type="submit" name="stop" value="{{ scene.name }}">Stop</button>
     </form>

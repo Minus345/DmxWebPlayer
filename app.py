@@ -26,14 +26,22 @@ db.init_app(app)
 
 Dmx.Reciver.DmxReceiver(app.config['DATABASE'])
 
-sceneList: List[Scene] = list()
-curRecording = False
-global curDmxReceiver
-global curDmxSender
 
 # TODO SIGHILD abfangen
 
-REC_NAME = "rec"
+def renderBasicTemplate() -> str:
+    cur = get_db().cursor()
+    sceneListRow = cur.execute("""SELECT scenename
+                               FROM frame
+                               WHERE frameid = 0""").fetchall()
+    sceneList = list(map(lambda x: x[0], sceneListRow))
+    print(sceneList)
+
+    curRecording = cur.execute("""SELECT scene
+                                  FROM util
+                                  WHERE name = ?""", (Dmx.REC_NAME,)).fetchone()[0]
+
+    return render_template('index.html', sceneList=sceneList, curRecording=curRecording)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -44,15 +52,15 @@ def index():
         cur = get_db().cursor()
         pidReceiverProcess = cur.execute("""SELECT pid
                                             FROM util
-                                            WHERE name == ?""", (REC_NAME,)).fetchone()['pid']
+                                            WHERE name == ?""", (Dmx.REC_NAME,)).fetchone()['pid']
 
         if request.form.get('sceneName') is not None:
             sceneName = request.form.get('sceneName')
-            #scnenName is empty
+            # scnenName is empty
             if sceneName == '':
                 return render_template('sceneCreationError.html', error="No scene name provided")
 
-            #scnenName already exists
+            # scnenName already exists
             exists = cur.execute("""SELECT COUNT(1)
                                     FROM frame
                                     WHERE scenename = ?""", (sceneName,)).fetchone()[0]
@@ -61,7 +69,7 @@ def index():
 
             cur.execute("""UPDATE util
                            SET scene = ?
-                           WHERE name = ?""", (sceneName, REC_NAME))
+                           WHERE name = ?""", (sceneName, Dmx.REC_NAME))
             get_db().commit()
             # start recording
             os.kill(pidReceiverProcess, signal.SIGUSR1)
@@ -69,10 +77,11 @@ def index():
         elif request.form.get('status') == 'stop':
             # stop recording
             os.kill(pidReceiverProcess, signal.SIGUSR2)
+            return renderBasicTemplate()
 
     elif request.form == 'GET':
         print("get")
-    return render_template('index.html', sceneList=sceneList, curRecording=curRecording)
+    return renderBasicTemplate()
 
 
 @app.route('/playback', methods=['GET', 'POST'])

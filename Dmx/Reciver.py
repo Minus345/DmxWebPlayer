@@ -3,18 +3,17 @@ import signal
 import sqlite3
 import time
 import multiprocessing as mp
-from os import pidfd_open
 from sqlite3 import Connection
 from threading import Thread
 
 import sacn
 
+import Dmx
 from Dmx.StoreDmxData import Scene, Frame
 
 
 class DmxReceiver:
     db: Connection
-    REC_NAME = "rec"
     curRecScene: Scene
 
     def dummyHandler(self, signum, frame):
@@ -26,7 +25,7 @@ class DmxReceiver:
         cur = self.db.cursor()
         name = cur.execute("""SELECT scene
                               FROM util
-                              WHERE name == 'rec'""").fetchone()['scene']
+                              WHERE name == ?""", (Dmx.REC_NAME,)).fetchone()['scene']
         self.curRecScene = Scene(name)
 
         ## start recording
@@ -38,6 +37,13 @@ class DmxReceiver:
         print("[REC] stop recording")
         ## put scene in db
         self.curRecScene.putSceneInDb(self.db)
+
+        # allow nex recording
+        cur = self.db.cursor()
+        cur.execute("""UPDATE util
+                       SET scene = ?
+                       WHERE name = ?""", (Dmx.SCENE_NONE, Dmx.REC_NAME))
+        self.db.commit()
 
     def __init__(self, databasePath: str):
         # TODO Sollte nur einmal gesetzt werden:
@@ -57,10 +63,10 @@ class DmxReceiver:
 
         # TODO was tun wenn noch nie erstellt wurde
         cur.execute(
-            "DELETE FROM util WHERE name = ?", (self.REC_NAME,))
+            "DELETE FROM util WHERE name = ?", (Dmx.REC_NAME,))
         self.db.commit()
 
-        data = (self.REC_NAME, os.getpid(), "NULL")
+        data = (Dmx.REC_NAME, os.getpid(), "NULL")
         cur.execute(
             "INSERT INTO util VALUES (?, ?, ?)", data)
         self.db.commit()
