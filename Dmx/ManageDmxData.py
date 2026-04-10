@@ -1,0 +1,206 @@
+import multiprocessing as mp
+import os
+import signal
+import sqlite3
+import time
+from sqlite3 import Connection
+from typing import override
+
+import sacn
+
+import Dmx
+from Dmx.StoreDmxData import Scene, Frame
+
+
+class BackgroundProcess:
+    db: Connection
+    curScene: Scene
+    processName: str
+    dataAction = False
+    running = True
+
+    def sigHandlerStart(self, signum, frame):
+        self.dataAction = True
+
+    def sigHandlerStop(self, signum, frame):
+        self.dataAction = False
+
+    def shutdownHandler(self, signum, frame):
+        print("shutdown")
+        self.running = False
+
+    def loop(self, databasePath: str):
+        pass
+
+    def setup(self, databasePath: str):
+        ## init db
+        self.db = sqlite3.connect(
+            databasePath,
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
+        self.db.row_factory = sqlite3.Row
+
+        cur = self.db.cursor()
+
+        # TODO was tun wenn noch nie erstellt wurde
+        cur.execute(
+            "DELETE FROM util WHERE name = ?", (self.processName,))
+        self.db.commit()
+
+        print(self.processName + ":" + str(os.getpid()))
+
+        data = (self.processName, os.getpid(), Dmx.SCENE_NONE)
+        cur.execute(
+            "INSERT INTO util VALUES (?, ?, ?)", data)
+        self.db.commit()
+
+        signal.signal(signal.SIGUSR1, self.sigHandlerStart)
+        signal.signal(signal.SIGUSR2, self.sigHandlerStop)
+        signal.signal(signal.SIGTERM, self.shutdownHandler)
+        signal.signal(signal.SIGINT, self.shutdownHandler)
+
+
+class Recording(BackgroundProcess):
+    def __init__(self):
+        self.processName = Dmx.REC_NAME
+
+    @override
+    def loop(self, databasePath: str):
+        super().setup(databasePath)
+        while self.running:
+            signal.pause()
+            if self.dataAction:
+                self.recordDmx()
+
+    def recordDmx(self):
+        ## get scene name from db or shutdown request
+        cur = self.db.cursor()
+        name = cur.execute("""SELECT scene
+                              FROM util
+                              WHERE name == ?""", (Dmx.REC_NAME,)).fetchone()['scene']
+
+        if name == Dmx.SCENE_NONE:
+            print("[REC] no scene name defined")
+            self.dataAction = False
+            return
+        self.curScene = Scene(name)
+
+        ## start recording
+        print("[REC] start recording: " + name)
+
+        receiver = sacn.sACNreceiver(bind_address='192.168.188.20')
+
+        @receiver.listen_on('universe', universe=1)
+        def callback(packet):  # packet type: sacn.DataPacket
+            if packet.dmxStartCode == 0x00:  # ignore non-DMX-data packets
+                curTime = time.time()
+                print(packet.dmxData)
+
+                if len(self.curScene.frameList) == 0:
+                    diffTime = 0
+                else:
+                    diffTime = curTime - self.curScene.frameList[-1].timestamp  ## timestamp from last Frame
+
+                print(diffTime)
+
+                self.curScene.addFrame(Frame(packet.dmxData, curTime, diffTime))
+
+        receiver.start()
+        receiver.join_multicast(1)
+
+        # sleep til signal received and handler ist triggerd
+        while self.dataAction and self.running:
+            signal.pause()
+
+        print("[REC] stop recording")
+        ## put scene in db
+        self.curScene.putSceneInDb(self.db)
+
+        # allow nex recording
+        cur = self.db.cursor()
+        cur.execute("""UPDATE util
+                       SET scene = ?
+                       WHERE name = ?""", (Dmx.SCENE_NONE, Dmx.REC_NAME))
+        self.db.commit()
+
+        receiver.leave_multicast(1)
+        receiver.stop()
+
+
+class Playback(BackgroundProcess):
+    def __init__(self):
+        self.processName = Dmx.PLAY_NAME
+
+    sender: sacn.sACNsender
+
+    def shutdownHandler(self, signum, frame):
+        super().shutdownHandler(signum, frame)
+        # sender stop when shutdown
+        self.sender.stop()
+
+    @override
+    def loop(self, databasePath: str):
+        super().setup(databasePath)
+
+        self.sender = sacn.sACNsender()
+        self.sender.start()
+        self.sender.activate_output(2)
+        self.sender[2].multicast = True
+
+        while self.running:
+            signal.pause()
+            if self.dataAction:
+                self.playback()
+
+    def playback(self):
+        # get scene out of db
+        cur = self.db.cursor()
+        name = cur.execute("""SELECT scene
+                              FROM util
+                              WHERE name == ?""", (Dmx.PLAY_NAME,)).fetchone()['scene']
+        self.curScene = Scene(name)
+
+        if name == Dmx.SCENE_NONE:
+            print("[PLAY] no scene name defined")
+            self.dataAction = False
+            return
+
+        self.curScene.getSceneOutOfDb(self.db)
+
+        print("[PLAY] start playback: " + name)
+
+        while self.dataAction and self.running:
+            for frame in self.curScene.frameList:
+                print(frame.timeAfterPrevious)
+                print(frame.DmxUniverseData)
+                time.sleep(frame.timeAfterPrevious)
+                self.sender[2].dmx_data = frame.DmxUniverseData
+
+        print("[PLAY] stop playback: " + name)
+
+        # update status in db
+        cur = self.db.cursor()
+        cur.execute("""UPDATE util
+                       SET scene = ?
+                       WHERE name = ?""", (Dmx.SCENE_NONE, Dmx.PLAY_NAME))
+        self.db.commit()
+
+
+def startAsProcess(databasePath: str):
+    # TODO Process Name arg verbessern mit attribut in unterklasse
+    contextMultiprocessing = mp.get_context('fork')
+    rec = Recording()
+    play = Playback()
+    runningProcess1 = contextMultiprocessing.Process(target=rec.loop, daemon=True, args=(databasePath,))
+    runningProcess2 = contextMultiprocessing.Process(target=play.loop, daemon=True, args=(databasePath,))
+    runningProcess1.start()
+    runningProcess2.start()
+
+
+if __name__ == '__main__':
+    # only for development and testing
+    # Recording().loop("/home/max/PycharmProjects/DmxWebPlayer/instance/flaskr.sqlite")
+    startAsProcess("/home/max/PycharmProjects/DmxWebPlayer/instance/flaskr.sqlite")
+    while True:
+        time.sleep(1)
+# Playback("/home/max/PycharmProjects/DmxWebPlayer/instance/flaskr.sqlite")

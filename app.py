@@ -1,19 +1,14 @@
 import os
 import signal
-from selectors import SelectSelector
-from typing import List
 
-from flask import Flask, request, g, current_app
-
-import Dmx.Reciver
-from Dmx import Reciver
-from Dmx.StoreDmxData import Scene
+from flask import Flask, request
 from flask import render_template
 
+import Dmx.ManageDmxData
 from db import get_db
 
-# create and configure the app
 app = Flask(__name__, instance_relative_config=True)
+# create and configure the app
 app.config.from_mapping(
     SECRET_KEY='dev',
     DATABASE=os.path.join(app.instance_path, 'flaskr.sqlite'),
@@ -24,16 +19,16 @@ import db
 
 db.init_app(app)
 
-Dmx.Reciver.DmxReceiver(app.config['DATABASE'])
+signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 
-
-# TODO SIGHILD abfangen
+# start Recording and Playback Threads
+Dmx.ManageDmxData.startAsProcess(app.config['DATABASE'])
 
 def renderBasicTemplate() -> str:
     cur = get_db().cursor()
     sceneListRow = cur.execute("""SELECT scenename
-                               FROM frame
-                               WHERE frameid = 0""").fetchall()
+                                  FROM frame
+                                  WHERE frameid = 0""").fetchall()
     sceneList = list(map(lambda x: x[0], sceneListRow))
     print(sceneList)
 
@@ -64,7 +59,7 @@ def index():
             exists = cur.execute("""SELECT COUNT(1)
                                     FROM frame
                                     WHERE scenename = ?""", (sceneName,)).fetchone()[0]
-            if exists == 1:
+            if exists >= 1:
                 return render_template('sceneCreationError.html', error="Scene already exists")
 
             cur.execute("""UPDATE util
@@ -87,50 +82,14 @@ def index():
 @app.route('/playback', methods=['GET', 'POST'])
 def playback():
     print(request.form)
-    return render_template('index.html', sceneList=sceneList, curRecording=curRecording)
+    return renderBasicTemplate()
 
 
 @app.route('/startPlayback')
 def startPlayback():
-    global curDmxSender
-    curDmxSender = Reciver.DmxPlayback(sceneList[0])
-    curDmxSender.startPlayback()
     return 'startPlayback'
 
 
 @app.route('/stopPlayback')
 def stopPlayback():
-    curDmxSender.stopPlayback()
     return 'stopPlayback'
-
-
-@app.route('/setup')
-def setup():
-    sceneList.append(Scene("a"))
-    sceneList.append(Scene("b"))
-    sceneList.append(Scene("c"))
-    print(sceneList)
-    cur = get_db().cursor()
-    cur.execute("""INSERT INTO state
-                   VALUES ('b', 1)""")
-    get_db().commit()
-    get_db().close()
-    return 'setup'
-
-
-@app.route('/get')
-def get():
-    cur = get_db().cursor()
-    res = cur.execute("""SELECT *
-                         FROM state
-                         WHERE status == 'a'""")
-    b = res.fetchone()
-    print(b.keys())
-    print(b['status'])
-    print(b['value'])
-    get_db().close()
-    return 'a'
-
-
-if __name__ == '__main__':
-    app.run()
