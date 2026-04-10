@@ -24,13 +24,13 @@ signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 # start Recording and Playback Threads
 Dmx.ManageDmxData.startAsProcess(app.config['DATABASE'])
 
+
 def renderBasicTemplate() -> str:
     cur = get_db().cursor()
     sceneListRow = cur.execute("""SELECT scenename
                                   FROM frame
                                   WHERE frameid = 0""").fetchall()
     sceneList = list(map(lambda x: x[0], sceneListRow))
-    print(sceneList)
 
     curRecording = cur.execute("""SELECT scene
                                   FROM util
@@ -82,14 +82,29 @@ def index():
 @app.route('/playback', methods=['GET', 'POST'])
 def playback():
     print(request.form)
+    if request.method == 'POST':
+        start = request.form.get('start')
+        stop = request.form.get('stop')
+        if start is not None:
+            # start scene in <start>
+            #TODO check if scene is really in db
+            updateUtilDbSceneName(Dmx.PLAY_NAME, start)
+        if stop is not None:
+            # start default scene
+            updateUtilDbSceneName(Dmx.PLAY_NAME, Dmx.SCENE_NONE)
+
+        cur = get_db().cursor()
+        pidReceiverProcess = cur.execute("""SELECT pid
+                                            FROM util
+                                            WHERE name == ?""", (Dmx.PLAY_NAME,)).fetchone()['pid']
+        os.kill(pidReceiverProcess, signal.SIGUSR1)
+
     return renderBasicTemplate()
 
 
-@app.route('/startPlayback')
-def startPlayback():
-    return 'startPlayback'
-
-
-@app.route('/stopPlayback')
-def stopPlayback():
-    return 'stopPlayback'
+def updateUtilDbSceneName(name: str, sceneName: str):
+    cur = get_db().cursor()
+    cur.execute("""UPDATE util
+                   SET scene = ?
+                   WHERE name = ?""", (sceneName, name))
+    get_db().commit()

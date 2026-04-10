@@ -128,10 +128,15 @@ class Recording(BackgroundProcess):
 
 
 class Playback(BackgroundProcess):
+    notifyFlag = False
+
     def __init__(self):
         self.processName = Dmx.PLAY_NAME
 
     sender: sacn.sACNsender
+
+    def sigHandlerStart(self, signum, frame):
+        self.notifyFlag = True
 
     def shutdownHandler(self, signum, frame):
         super().shutdownHandler(signum, frame)
@@ -147,47 +152,48 @@ class Playback(BackgroundProcess):
         self.sender.activate_output(2)
         self.sender[2].multicast = True
 
-        while self.running:
-            signal.pause()
-            if self.dataAction:
-                self.playback()
+        # TODO: load default scene at startup in db with empty data
 
-    def playback(self):
+        # TODO: Static scene
+
+        # default scene laden
+        self.curScene = self.loadSceneFromDB()
+
+        while self.running:
+            self.playback()
+            if self.notifyFlag:
+                self.curScene = self.loadSceneFromDB()
+                self.notifyFlag = False
+
+    def loadSceneFromDB(self) -> Scene:
         # get scene out of db
         cur = self.db.cursor()
         name = cur.execute("""SELECT scene
                               FROM util
                               WHERE name == ?""", (Dmx.PLAY_NAME,)).fetchone()['scene']
-        self.curScene = Scene(name)
+        s = Scene(name)
+        s.getSceneOutOfDb(self.db)
+        return s
 
-        if name == Dmx.SCENE_NONE:
-            print("[PLAY] no scene name defined")
-            self.dataAction = False
-            return
+    def playback(self):
 
-        self.curScene.getSceneOutOfDb(self.db)
+        print("[PLAY] start playback: " + self.curScene.name)
 
-        print("[PLAY] start playback: " + name)
-
-        while self.dataAction and self.running:
+        while not self.notifyFlag and self.running:
             for frame in self.curScene.frameList:
-                print(frame.timeAfterPrevious)
-                print(frame.DmxUniverseData)
+                #QUESTION geht das auch besser mit dem scene wechseln?
+                if self.notifyFlag:
+                    print("[PLAY] stop playback: " + self.curScene.name)
+                    return
+                # print(frame.timeAfterPrevious)
+                # print(frame.DmxUniverseData)
                 time.sleep(frame.timeAfterPrevious)
                 self.sender[2].dmx_data = frame.DmxUniverseData
 
-        print("[PLAY] stop playback: " + name)
-
-        # update status in db
-        cur = self.db.cursor()
-        cur.execute("""UPDATE util
-                       SET scene = ?
-                       WHERE name = ?""", (Dmx.SCENE_NONE, Dmx.PLAY_NAME))
-        self.db.commit()
+        print("returned normally")
 
 
 def startAsProcess(databasePath: str):
-    # TODO Process Name arg verbessern mit attribut in unterklasse
     contextMultiprocessing = mp.get_context('fork')
     rec = Recording()
     play = Playback()

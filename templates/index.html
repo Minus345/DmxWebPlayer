@@ -22,10 +22,13 @@
 {% for scene in sceneList %}
     <form action="/playback" method="POST">
         <label for="scene_name"><em>Scene Name: </em><strong>{{ scene }}</strong>
-            <!---   <em>Running: </em><strong>{{ scene.running }}</strong>--></label>
-        <button type="submit" name="start" value="{{ scene.name }}">Start</button>
-        <button type="submit" name="stop" value="{{ scene.name }}">Stop</button>
+        <button type="submit" name="start" value="{{ scene }}">Start</button>
     </form>
 {% endfor %}
+
+<form action="/playback" method="POST">
+    <button type="submit" name="stop" value="stop">Stop</button>
+</form>
+
 </body>
 </html>
