@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% set title = "Edit" %}
+{% set active = "edit" %}
+
+{% block content %}
+<form action="/edit" method="POST">
+    <label for="sceneRecording">New Scene Name:</label>
+    <input type="text" id="sceneRecording" name="sceneName">
+    <input type="submit" value="Start Recording">
+</form>
+<form action="/edit" method="POST">
+    <label for="sceneRecordingStop">Currently Recording: {{ curRecording }}</label>
+    <button type="submit" name="status" value="stop">Stop Recording</button>
+</form>
+{% endblock %}

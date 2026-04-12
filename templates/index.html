@@ -6,29 +6,7 @@
 </head>
 <body>
 <p>DmxWebPlayer</p>
-
-<form action="/" method="POST">
-    <label for="sceneRecording">New Scene Name:</label>
-    <input type="text" id="sceneRecording" name="sceneName">
-    <input type="submit" value="Start Recording">
-</form>
-<form action="/" method="POST">
-    <label for="sceneRecordingStop">Currently Recording: {{ curRecording }}</label>
-    <button type="submit" name="status" value="stop">Stop Recording</button>
-</form>
-
-<br>
-
-{% for scene in sceneList %}
-    <form action="/playback" method="POST">
-        <label for="scene_name"><em>Scene Name: </em><strong>{{ scene }}</strong>
-        <button type="submit" name="start" value="{{ scene }}">Start</button>
-    </form>
-{% endfor %}
-
-<form action="/playback" method="POST">
-    <button type="submit" name="stop" value="stop">Stop</button>
-</form>
-
+<a href="/playback">Playback</a>
+<a href="/edit">Edit</a>
 </body>
 </html>

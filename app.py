@@ -1,5 +1,6 @@
 import os
 import signal
+from typing import Any
 
 from flask import Flask, request
 from flask import render_template
@@ -25,22 +26,31 @@ signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 Dmx.ManageDmxData.startAsProcess(app.config['DATABASE'])
 
 
-def renderBasicTemplate() -> str:
+def getCurrantScenes() -> list[Any]:
     cur = get_db().cursor()
     sceneListRow = cur.execute("""SELECT scenename
                                   FROM frame
                                   WHERE frameid = 0""").fetchall()
     sceneList = list(map(lambda x: x[0], sceneListRow))
 
+    return sceneList
+
+
+def getCurrantRecording():
+    cur = get_db().cursor()
     curRecording = cur.execute("""SELECT scene
                                   FROM util
                                   WHERE name = ?""", (Dmx.REC_NAME,)).fetchone()[0]
+    return curRecording
 
-    return render_template('index.html', sceneList=sceneList, curRecording=curRecording)
 
-
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 def index():
+    return render_template('index.html')
+
+
+@app.route('/edit', methods=['GET', 'POST'])
+def edit():
     print(request.form)
     if request.method == 'POST':
 
@@ -72,11 +82,11 @@ def index():
         elif request.form.get('status') == 'stop':
             # stop recording
             os.kill(pidReceiverProcess, signal.SIGUSR2)
-            return renderBasicTemplate()
+            return render_template('edit.html', curRecording=getCurrantRecording())
 
     elif request.form == 'GET':
         print("get")
-    return renderBasicTemplate()
+    return render_template('edit.html', curRecording=getCurrantRecording())
 
 
 @app.route('/playback', methods=['GET', 'POST'])
@@ -87,7 +97,7 @@ def playback():
         stop = request.form.get('stop')
         if start is not None:
             # start scene in <start>
-            #TODO check if scene is really in db
+            # TODO check if scene is really in db
             updateUtilDbSceneName(Dmx.PLAY_NAME, start)
         if stop is not None:
             # start default scene
@@ -99,7 +109,7 @@ def playback():
                                             WHERE name == ?""", (Dmx.PLAY_NAME,)).fetchone()['pid']
         os.kill(pidReceiverProcess, signal.SIGUSR1)
 
-    return renderBasicTemplate()
+    return render_template('playback.html', sceneList=getCurrantScenes())
 
 
 def updateUtilDbSceneName(name: str, sceneName: str):

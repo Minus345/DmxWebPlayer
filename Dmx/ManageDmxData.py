@@ -166,6 +166,7 @@ class Playback(BackgroundProcess):
                 self.notifyFlag = False
 
     def loadSceneFromDB(self) -> Scene:
+        # TODO check if scene is really in db
         # get scene out of db
         cur = self.db.cursor()
         name = cur.execute("""SELECT scene
@@ -187,7 +188,11 @@ class Playback(BackgroundProcess):
                     return
                 # print(frame.timeAfterPrevious)
                 # print(frame.DmxUniverseData)
-                time.sleep(frame.timeAfterPrevious)
+                try:
+                    time.sleep(frame.timeAfterPrevious)
+                except InterruptedError:
+                    # TODO: test this
+                    return
                 self.sender[2].dmx_data = frame.DmxUniverseData
 
         print("returned normally")

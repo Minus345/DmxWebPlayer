@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% set title = "Playback" %}
+{% set active = "playback" %}
+
+{% block content %}
+{% for scene in sceneList %}
+    <form action="/playback" method="POST">
+        <label for="scene_name"><em>Scene Name: </em><strong>{{ scene }}</strong>
+        <button type="submit" name="start" value="{{ scene }}">Start</button>
+    </form>
+{% endfor %}
+
+<form action="/playback" method="POST">
+    <button type="submit" name="stop" value="stop">Stop</button>
+</form>
+{% endblock %}
