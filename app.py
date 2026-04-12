@@ -66,7 +66,7 @@ def edit():
                 return render_template('sceneCreationError.html', error="No scene name provided")
 
             # scnenName already exists
-            exists = cur.execute("""SELECT COUNT(1)
+            exists = cur.execute("""SELECT COUNT(*)
                                     FROM frame
                                     WHERE scenename = ?""", (sceneName,)).fetchone()[0]
             if exists >= 1:
@@ -97,7 +97,7 @@ def playback():
         stop = request.form.get('stop')
         if start is not None:
             # start scene in <start>
-            # TODO check if scene is really in db
+            #check if scene is really in db -> in ManageDmxData
             updateUtilDbSceneName(Dmx.PLAY_NAME, start)
         if stop is not None:
             # start default scene

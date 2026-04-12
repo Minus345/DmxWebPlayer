@@ -166,12 +166,23 @@ class Playback(BackgroundProcess):
                 self.notifyFlag = False
 
     def loadSceneFromDB(self) -> Scene:
-        # TODO check if scene is really in db
         # get scene out of db
         cur = self.db.cursor()
         name = cur.execute("""SELECT scene
                               FROM util
                               WHERE name == ?""", (Dmx.PLAY_NAME,)).fetchone()['scene']
+
+        # check if scene exists
+        exists = cur.execute("""SELECT COUNT(*)
+                                FROM frame
+                                WHERE scenename = ?""", (name,)).fetchone()[0]
+
+        if exists <= 0:
+            print("[PLAY] could not find scene: " + name + " . Returning to default scene")
+            default = Scene(Dmx.SCENE_NONE)
+            default.getSceneOutOfDb(self.db)
+            return default
+
         s = Scene(name)
         s.getSceneOutOfDb(self.db)
         return s
@@ -182,7 +193,7 @@ class Playback(BackgroundProcess):
 
         while not self.notifyFlag and self.running:
             for frame in self.curScene.frameList:
-                #QUESTION geht das auch besser mit dem scene wechseln?
+                # QUESTION geht das auch besser mit dem scene wechseln?
                 if self.notifyFlag:
                     print("[PLAY] stop playback: " + self.curScene.name)
                     return
