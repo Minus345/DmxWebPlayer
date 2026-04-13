@@ -13,26 +13,12 @@ from Dmx.StoreDmxData import Scene, Frame
 
 
 class BackgroundProcess:
-    db: Connection
-    curScene: Scene
-    processName: str
-    dataAction = False
-    running = True
-
-    def sigHandlerStart(self, signum, frame):
-        self.dataAction = True
-
-    def sigHandlerStop(self, signum, frame):
+    def __init__(self, processName: str, databasePath: str):
+        self.curScene = None
+        self.processName = processName
         self.dataAction = False
+        self.running = True
 
-    def shutdownHandler(self, signum, frame):
-        print("shutdown")
-        self.running = False
-
-    def loop(self, databasePath: str):
-        pass
-
-    def setup(self, databasePath: str):
         ## init db
         self.db = sqlite3.connect(
             databasePath,
@@ -47,6 +33,8 @@ class BackgroundProcess:
         if isInitialized <= 0:
             raise Exception('DB not initialised')
 
+    def setupProcess(self):
+        cur = self.db.cursor()
         data = (os.getpid(), Dmx.SCENE_NONE, self.processName)
         cur.execute(
             "UPDATE util SET pid = ?, scene = ? WHERE name = ?", data)
@@ -57,14 +45,26 @@ class BackgroundProcess:
         signal.signal(signal.SIGTERM, self.shutdownHandler)
         signal.signal(signal.SIGINT, self.shutdownHandler)
 
+    def sigHandlerStart(self, signum, frame):
+        self.dataAction = True
+
+    def sigHandlerStop(self, signum, frame):
+        self.dataAction = False
+
+    def shutdownHandler(self, signum, frame):
+        print("shutdown")
+        self.running = False
+
+    def loop(self):
+        self.setupProcess()
+
 
 class Recording(BackgroundProcess):
-    def __init__(self):
-        self.processName = Dmx.REC_NAME
+    def __init__(self, databasePath: str):
+        super().__init__(Dmx.REC_NAME, databasePath)
 
-    @override
-    def loop(self, databasePath: str):
-        super().setup(databasePath)
+    def loop(self):
+        super().loop()
         while self.running:
             signal.pause()
             if self.dataAction:
@@ -126,12 +126,10 @@ class Recording(BackgroundProcess):
 
 
 class Playback(BackgroundProcess):
-    notifyFlag = False
-
-    def __init__(self):
-        self.processName = Dmx.PLAY_NAME
-
-    sender: sacn.sACNsender
+    def __init__(self, databasePath: str):
+        super().__init__(Dmx.PLAY_NAME, databasePath)
+        self.notifyFlag = False
+        self.sender = sacn.sACNsender()
 
     def sigHandlerStart(self, signum, frame):
         self.notifyFlag = True
@@ -141,11 +139,11 @@ class Playback(BackgroundProcess):
         # sender stop when shutdown
         self.sender.stop()
 
-    @override
-    def loop(self, databasePath: str):
-        super().setup(databasePath)
 
-        self.sender = sacn.sACNsender()
+    def loop(self):
+        super().loop()
+        """multi process function"""
+
         self.sender.start()
         self.sender.activate_output(2)
         self.sender[2].multicast = True
@@ -209,10 +207,10 @@ class Playback(BackgroundProcess):
 
 def startAsProcess(databasePath: str):
     contextMultiprocessing = mp.get_context('fork')
-    rec = Recording()
-    play = Playback()
-    runningProcess1 = contextMultiprocessing.Process(target=rec.loop, daemon=True, args=(databasePath,))
-    runningProcess2 = contextMultiprocessing.Process(target=play.loop, daemon=True, args=(databasePath,))
+    rec = Recording(databasePath)
+    play = Playback(databasePath)
+    runningProcess1 = contextMultiprocessing.Process(target=rec.loop, daemon=True)
+    runningProcess2 = contextMultiprocessing.Process(target=play.loop, daemon=True)
     runningProcess1.start()
     runningProcess2.start()
 

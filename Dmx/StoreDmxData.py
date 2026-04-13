@@ -6,10 +6,6 @@ import sacn
 
 
 class Frame:
-    timeAfterPrevious: float  # TODO in db int
-    timestamp: float
-    DmxUniverseData = sacn.DataPacket
-
     def __init__(self, data: sacn.DataPacket, timestamp: float, timeAfterPrevious: float):
         self.timeAfterPrevious = timeAfterPrevious
         self.DmxUniverseData = data
@@ -25,11 +21,9 @@ def getUniverseDataInObjectFormat(data) -> sacn.DataPacket:
 
 
 class Scene:
-    name: str
-    frameList: List[Frame] = list()
-
     def __init__(self, name):
         self.name = name
+        self.frameList: List[Frame] = list()
 
     def addFrame(self, frame: Frame):
         self.frameList.append(frame)
