@@ -42,16 +42,14 @@ class BackgroundProcess:
 
         cur = self.db.cursor()
 
-        # TODO was tun wenn noch nie erstellt wurde
-        cur.execute(
-            "DELETE FROM util WHERE name = ?", (self.processName,))
-        self.db.commit()
+        # check if db is initialized
+        isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
+        if isInitialized <= 0:
+            raise Exception('DB not initialised')
 
-        print(self.processName + ":" + str(os.getpid()))
-
-        data = (self.processName, os.getpid(), Dmx.SCENE_NONE)
+        data = (os.getpid(), Dmx.SCENE_NONE, self.processName)
         cur.execute(
-            "INSERT INTO util VALUES (?, ?, ?)", data)
+            "UPDATE util SET pid = ?, scene = ? WHERE name = ?", data)
         self.db.commit()
 
         signal.signal(signal.SIGUSR1, self.sigHandlerStart)
@@ -217,6 +215,17 @@ def startAsProcess(databasePath: str):
     runningProcess2 = contextMultiprocessing.Process(target=play.loop, daemon=True, args=(databasePath,))
     runningProcess1.start()
     runningProcess2.start()
+
+
+def initDB(db: Connection):
+    cur = db.cursor()
+    dataRec = (Dmx.REC_NAME, 0, Dmx.SCENE_NONE)
+    dataPlay = (Dmx.PLAY_NAME, 0, Dmx.SCENE_NONE)
+    cur.execute(
+        "INSERT INTO util VALUES (?, ?, ?)", dataRec)
+    cur.execute(
+        "INSERT INTO util VALUES (?, ?, ?)", dataPlay)
+    db.commit()
 
 
 if __name__ == '__main__':
