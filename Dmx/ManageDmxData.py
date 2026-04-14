@@ -4,7 +4,6 @@ import signal
 import sqlite3
 import time
 from sqlite3 import Connection
-from typing import override
 
 import sacn
 
@@ -31,6 +30,7 @@ class BackgroundProcess:
         # check if db is initialized
         isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
         if isInitialized <= 0:
+            # TODO noch mal schauen wie man das am besten in python machet
             raise Exception('DB not initialised')
 
     def setupProcess(self):
@@ -129,6 +129,10 @@ class Playback(BackgroundProcess):
     def __init__(self, databasePath: str):
         super().__init__(Dmx.PLAY_NAME, databasePath)
         self.notifyFlag = False
+
+        self.defaultScene = Scene("Default Scene")
+        self.defaultScene.addFrame(Frame(((0,) * 510),0,0))
+
         self.sender = sacn.sACNsender()
 
     def sigHandlerStart(self, signum, frame):
@@ -139,7 +143,6 @@ class Playback(BackgroundProcess):
         # sender stop when shutdown
         self.sender.stop()
 
-
     def loop(self):
         super().loop()
         """multi process function"""
@@ -148,12 +151,10 @@ class Playback(BackgroundProcess):
         self.sender.activate_output(2)
         self.sender[2].multicast = True
 
-        # TODO: load default scene at startup in db with empty data
-
         # TODO: Static scene
 
         # default scene laden
-        self.curScene = self.loadSceneFromDB()
+        self.curScene = self.defaultScene
 
         while self.running:
             self.playback()
@@ -168,6 +169,9 @@ class Playback(BackgroundProcess):
                               FROM util
                               WHERE name == ?""", (Dmx.PLAY_NAME,)).fetchone()['scene']
 
+        if name == Dmx.SCENE_NONE:
+            return self.defaultScene
+
         # check if scene exists
         exists = cur.execute("""SELECT COUNT(*)
                                 FROM frame
@@ -175,9 +179,7 @@ class Playback(BackgroundProcess):
 
         if exists <= 0:
             print("[PLAY] could not find scene: " + name + " . Returning to default scene")
-            default = Scene(Dmx.SCENE_NONE)
-            default.getSceneOutOfDb(self.db)
-            return default
+            return self.defaultScene
 
         s = Scene(name)
         s.getSceneOutOfDb(self.db)
@@ -193,8 +195,8 @@ class Playback(BackgroundProcess):
                 if self.notifyFlag:
                     print("[PLAY] stop playback: " + self.curScene.name)
                     return
-                # print(frame.timeAfterPrevious)
-                # print(frame.DmxUniverseData)
+                #print(frame.timeAfterPrevious)
+                #print(frame.DmxUniverseData)
                 try:
                     time.sleep(frame.timeAfterPrevious)
                 except InterruptedError:

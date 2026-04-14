@@ -1,12 +1,12 @@
 import pickle
 from sqlite3 import Connection
-from typing import List
+from typing import List, Any
 
 import sacn
 
 
 class Frame:
-    def __init__(self, data: sacn.DataPacket, timestamp: float, timeAfterPrevious: float):
+    def __init__(self, data: Any, timestamp: float, timeAfterPrevious: float):
         self.timeAfterPrevious = timeAfterPrevious
         self.DmxUniverseData = data
         self.timestamp = timestamp

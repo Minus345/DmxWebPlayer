@@ -4,6 +4,9 @@ from datetime import datetime
 import click
 from flask import current_app, g
 
+import Dmx.ManageDmxData
+
+
 def init_app(app):
     app.teardown_appcontext(close_db)
     app.cli.add_command(init_db_command)
@@ -13,6 +16,9 @@ def init_db():
 
     with current_app.open_resource('schema.sql') as f:
         db.executescript(f.read().decode('utf8'))
+
+    # init db for dmx module
+    Dmx.ManageDmxData.initDB(db)
 
 
 @click.command('init-db')
