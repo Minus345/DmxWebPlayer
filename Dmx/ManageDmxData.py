@@ -2,8 +2,10 @@ import multiprocessing as mp
 import os
 import signal
 import sqlite3
+import threading
 import time
 from sqlite3 import Connection
+from threading import Thread
 
 import sacn
 
@@ -34,6 +36,7 @@ class BackgroundProcess:
             raise Exception('DB not initialised')
 
     def setupProcess(self):
+        """Sets Up DB wit pid - call in process"""
         cur = self.db.cursor()
         data = (os.getpid(), Dmx.SCENE_NONE, self.processName)
         cur.execute(
@@ -126,14 +129,9 @@ class Recording(BackgroundProcess):
 
 
 class Playback(BackgroundProcess):
-    def __init__(self, databasePath: str):
-        super().__init__(Dmx.PLAY_NAME, databasePath)
-        self.notifyFlag = False
-
-        self.defaultScene = Scene("Default Scene")
-        self.defaultScene.addFrame(Frame(((0,) * 510),0,0))
-
-        self.sender = sacn.sACNsender()
+    # TODO: Static scene
+    TARGET_HZ = 30
+    PERIOD = 1.0 / TARGET_HZ
 
     def sigHandlerStart(self, signum, frame):
         self.notifyFlag = True
@@ -143,24 +141,55 @@ class Playback(BackgroundProcess):
         # sender stop when shutdown
         self.sender.stop()
 
-    def loop(self):
-        super().loop()
-        """multi process function"""
+    def __init__(self, databasePath: str):
+        super().__init__(Dmx.PLAY_NAME, databasePath)
+        self.curSceneLock = threading.Lock()
+        super().setupProcess()
+        self.notifyFlag = False
 
+        self.defaultScene = Scene("Default Scene")
+        self.defaultScene.addFrame(Frame(([0] * 512), 0, 0))
+        self.curScene = self.defaultScene
+
+        self.sender = sacn.sACNsender()
+        self.senderThread = Thread(target=self.senderWorker, args=(), daemon= True)
+
+        self.senderThread.start()
+        self.managingWorker()
+
+    def managingWorker(self):
+        while self.running:
+            # QUESTION muss ich hier das flag auch noch mal abfragen?
+            signal.pause()
+            if self.notifyFlag:
+                newScene = self.loadSceneFromDB()
+                with self.curSceneLock:
+                    self.curScene = newScene
+                self.notifyFlag = False
+
+    def senderWorker(self):
         self.sender.start()
         self.sender.activate_output(2)
         self.sender[2].multicast = True
 
-        # TODO: Static scene
-
-        # default scene laden
-        self.curScene = self.defaultScene
+        nextTime = time.perf_counter()
+        output = [0] * 512
 
         while self.running:
-            self.playback()
-            if self.notifyFlag:
-                self.curScene = self.loadSceneFromDB()
-                self.notifyFlag = False
+            with self.curSceneLock:
+                self.curScene.apply(output)
+
+            self.sender[2].dmx_data = output
+
+            # ---- 30 hz berechnung ----
+            nextTime += self.PERIOD
+            sleepTime = nextTime - time.perf_counter()
+            if sleepTime > 0:
+                time.sleep(sleepTime)
+            else:
+                # Wir sind zu langsam → Frame skippen
+                nextTime = time.perf_counter()
+
 
     def loadSceneFromDB(self) -> Scene:
         # get scene out of db
@@ -185,34 +214,11 @@ class Playback(BackgroundProcess):
         s.getSceneOutOfDb(self.db)
         return s
 
-    def playback(self):
-
-        print("[PLAY] start playback: " + self.curScene.name)
-
-        while not self.notifyFlag and self.running:
-            for frame in self.curScene.frameList:
-                # QUESTION geht das auch besser mit dem scene wechseln?
-                if self.notifyFlag:
-                    print("[PLAY] stop playback: " + self.curScene.name)
-                    return
-                #print(frame.timeAfterPrevious)
-                #print(frame.DmxUniverseData)
-                try:
-                    time.sleep(frame.timeAfterPrevious)
-                except InterruptedError:
-                    # TODO: test this
-                    return
-                self.sender[2].dmx_data = frame.DmxUniverseData
-
-        print("returned normally")
-
-
 def startAsProcess(databasePath: str):
     contextMultiprocessing = mp.get_context('fork')
     rec = Recording(databasePath)
-    play = Playback(databasePath)
     runningProcess1 = contextMultiprocessing.Process(target=rec.loop, daemon=True)
-    runningProcess2 = contextMultiprocessing.Process(target=play.loop, daemon=True)
+    runningProcess2 = contextMultiprocessing.Process(target=Playback.__init__, daemon=True, args=(databasePath, ))
     runningProcess1.start()
     runningProcess2.start()
 
