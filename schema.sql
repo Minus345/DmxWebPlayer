@@ -1,7 +1,6 @@
 DROP TABLE IF EXISTS state;
 DROP TABLE IF EXISTS util;
 DROP TABLE IF EXISTS frame;
-DROP TABLE IF EXISTS scene;
 
 CREATE TABLE state
 (
@@ -16,8 +15,6 @@ CREATE TABLE util
     scene TEXT
 );
 
-INSERT INTO util VALUES ('rec', 0, 'None');
-
 CREATE TABLE frame
 (
     scenename TEXT    NOT NULL,
@@ -25,10 +22,4 @@ CREATE TABLE frame
     timestamp INTEGER,
     dmxdata   BLOB,
     PRIMARY KEY (scenename, frameid)
-);
-
-CREATE TABLE scene
-(
-    scenename TEXT    NOT NULL,
-    framecount INTEGER
 );

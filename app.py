@@ -24,6 +24,7 @@ signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 
 # start Recording and Playback Threads
 Dmx.ManageDmxData.startAsProcess(app.config['DATABASE'])
+# TODO make init db command work -> delay startup Processes
 
 
 def getCurrantScenes() -> list[Any]:

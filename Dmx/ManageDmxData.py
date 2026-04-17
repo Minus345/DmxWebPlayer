@@ -32,7 +32,6 @@ class BackgroundProcess:
         # check if db is initialized
         isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
         if isInitialized <= 0:
-            # TODO noch mal schauen wie man das am besten in python machet
             raise Exception('DB not initialised')
 
     def setupProcess(self):
@@ -55,7 +54,7 @@ class BackgroundProcess:
         self.dataAction = False
 
     def shutdownHandler(self, signum, frame):
-        print("shutdown")
+        print(f"shutdown {self.processName}")
         self.running = False
 
     def loop(self):
@@ -65,6 +64,7 @@ class BackgroundProcess:
 class Recording(BackgroundProcess):
     def __init__(self, databasePath: str):
         super().__init__(Dmx.REC_NAME, databasePath)
+        self.prevTimeStamp = 0.0
 
     def loop(self):
         super().loop()
@@ -100,11 +100,14 @@ class Recording(BackgroundProcess):
                 if len(self.curScene.frameList) == 0:
                     diffTime = 0
                 else:
-                    diffTime = curTime - self.curScene.frameList[-1].timestamp  ## timestamp from last Frame
+                    diffTime = curTime - self.prevTimeStamp  ## timestamp from last Frame
 
-                print(diffTime)
+                print(f"{diffTime} + {diffTime / 0.03} +{round(diffTime / 0.03)}")
 
-                self.curScene.addFrame(Frame(packet.dmxData, curTime, diffTime))
+                frame = Frame(packet.dmxData)
+                frame.setTimeAfterPrevious(diffTime)
+                self.curScene.addFrame(frame)
+                self.prevTimeStamp = curTime
 
         receiver.start()
         receiver.join_multicast(1)
@@ -143,23 +146,22 @@ class Playback(BackgroundProcess):
 
     def __init__(self, databasePath: str):
         super().__init__(Dmx.PLAY_NAME, databasePath)
-        self.curSceneLock = threading.Lock()
         super().setupProcess()
+        self.curSceneLock = threading.Lock()
         self.notifyFlag = False
 
         self.defaultScene = Scene("Default Scene")
-        self.defaultScene.addFrame(Frame(([0] * 512), 0, 0))
+        self.defaultScene.addFrame(Frame([0] * 512))
         self.curScene = self.defaultScene
 
-        self.sender = sacn.sACNsender()
-        self.senderThread = Thread(target=self.senderWorker, args=(), daemon= True)
+        self.sender = sacn.sACNsender(fps=self.TARGET_HZ)
+        self.senderThread = Thread(target=self.senderWorker, args=(), daemon=True)
 
         self.senderThread.start()
         self.managingWorker()
 
     def managingWorker(self):
         while self.running:
-            # QUESTION muss ich hier das flag auch noch mal abfragen?
             signal.pause()
             if self.notifyFlag:
                 newScene = self.loadSceneFromDB()
@@ -190,7 +192,6 @@ class Playback(BackgroundProcess):
                 # Wir sind zu langsam → Frame skippen
                 nextTime = time.perf_counter()
 
-
     def loadSceneFromDB(self) -> Scene:
         # get scene out of db
         cur = self.db.cursor()
@@ -214,11 +215,12 @@ class Playback(BackgroundProcess):
         s.getSceneOutOfDb(self.db)
         return s
 
+
 def startAsProcess(databasePath: str):
     contextMultiprocessing = mp.get_context('fork')
     rec = Recording(databasePath)
     runningProcess1 = contextMultiprocessing.Process(target=rec.loop, daemon=True)
-    runningProcess2 = contextMultiprocessing.Process(target=Playback.__init__, daemon=True, args=(databasePath, ))
+    runningProcess2 = contextMultiprocessing.Process(target=Playback, daemon=True, args=(databasePath,))
     runningProcess1.start()
     runningProcess2.start()
 

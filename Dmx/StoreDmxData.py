@@ -4,17 +4,19 @@ from typing import List
 
 
 class Frame:
-    def __init__(self, data: list[int], timestamp: float, timeAfterPrevious: float):
+    def __init__(self, data: list[int]):
         self.DmxUniverseData = data
-        self.step = timeAfterPrevious / 30
-        self.timestamp = timestamp
+        self.step = 0
+
+    def setTimeAfterPrevious(self, timeAfterPrevious: float):
+        self.step = round(timeAfterPrevious / 0.03)
 
 
-def getUniverseDataInDbFormat(frame: Frame) -> bytes:
+def getFrameInDbFormat(frame: Frame) -> bytes:
     return pickle.dumps(frame.DmxUniverseData)
 
 
-def getUniverseDataInObjectFormat(data) -> list[int]:
+def getFrameInObjectFormat(data) -> list[int]:
     return pickle.loads(data)
 
 
@@ -33,7 +35,7 @@ class Scene:
     def putSceneInDb(self, db: Connection):
         cur = db.cursor()
         for i in range(0, len(self.frameList)):
-            data = (self.name, i, self.frameList[i].step, getUniverseDataInDbFormat(self.frameList[i]))
+            data = (self.name, i, self.frameList[i].step, getFrameInDbFormat(self.frameList[i]))
             cur.execute(
                 "INSERT INTO frame VALUES (?, ?, ?,?)", data)
         db.commit()
@@ -43,12 +45,18 @@ class Scene:
         cur = db.cursor()
         frameCount = cur.execute("SELECT COUNT(*) FROM frame WHERE scenename = ?", (self.name,)).fetchone()[0]
         for i in range(0, frameCount):
-            frame = cur.execute("SELECT * FROM frame WHERE scenename = ? AND frameid = ?", (self.name, i,)).fetchone()
-            self.frameList.append(Frame(getUniverseDataInObjectFormat(frame['dmxdata']), 0, frame['timestamp']))
+            frameData = cur.execute("SELECT * FROM frame WHERE scenename = ? AND frameid = ?", (self.name, i,)).fetchone()
+            frame = Frame(getFrameInObjectFormat(frameData['dmxdata']))
+            frame.step = frameData['timestamp']
+            self.frameList.append(frame)
+
 
     def apply(self, output: list[int]):
         self.sleepCounter += 1
         if self.sleepCounter >= self.frameList[self.frameCounter].step:
-            self.sleepCounter = 0
-            for ch, vl in self.frameList[self.frameCounter].DmxUniverseData:
+            for ch, vl in zip(range(0, 255), self.frameList[self.frameCounter].DmxUniverseData):
                 output[ch] = vl
+            self.frameCounter += 1
+            self.sleepCounter = 0
+            if self.frameCounter >= len(self.frameList):
+                self.frameCounter = 0
