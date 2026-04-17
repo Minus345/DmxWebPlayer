@@ -4,6 +4,7 @@ import signal
 import sqlite3
 import threading
 import time
+import warnings
 from sqlite3 import Connection
 from threading import Thread
 
@@ -32,7 +33,7 @@ class BackgroundProcess:
         # check if db is initialized
         isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
         if isInitialized <= 0:
-            raise Exception('DB not initialised')
+            warnings.warn(message='DB not initialised',category=Warning)
 
     def setupProcess(self):
         """Sets Up DB wit pid - call in process"""
