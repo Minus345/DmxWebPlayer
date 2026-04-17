@@ -3,13 +3,49 @@
 {% set active = "edit" %}
 
 {% block content %}
-<form action="/edit" method="POST">
-    <label for="sceneRecording">New Scene Name:</label>
-    <input type="text" id="sceneRecording" name="sceneName">
-    <input type="submit" value="Start Recording">
-</form>
-<form action="/edit" method="POST">
-    <label for="sceneRecordingStop">Currently Recording: {{ curRecording }}</label>
-    <button type="submit" name="status" value="stop">Stop Recording</button>
-</form>
+    <form action="/edit" method="POST">
+        <label for="sceneRecording">New Scene Name:</label>
+        <input type="text" id="sceneRecording" name="sceneName">
+        <input type="submit" value="Start Recording">
+    </form>
+    <form action="/edit" method="POST">
+        <label for="sceneRecordingStop">Currently Recording: {{ curRecording }}</label>
+        <button type="submit" name="status" value="stop">Stop Recording</button>
+    </form>
+
+    <hr>
+
+    <style>
+        table, th, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+        }
+    </style>
+
+    <script>
+        function clicked(e) {
+            if (!confirm('Are you sure?')) {
+                e.preventDefault();
+            }
+        }
+    </script>
+
+    <table>
+        <tr>
+            <th>Scene Name</th>
+            <th>Action</th>
+        </tr>
+        {% for scene in sceneList %}
+            <tr>
+                <td>{{ scene }}</td>
+                <td>
+                    <form action="/edit" method="POST">
+                        <button type="submit" name="edit" value="{{ scene }}">Edit</button>
+                        <button type="submit" onclick="clicked(event)" name="delete" value="{{ scene }}">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+
 {% endblock %}

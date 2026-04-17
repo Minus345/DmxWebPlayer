@@ -182,6 +182,7 @@ class Playback(BackgroundProcess):
                 self.curScene.apply(output)
 
             self.sender[2].dmx_data = output
+            #TODO: only send changed data
 
             # ---- 30 hz berechnung ----
             nextTime += self.PERIOD

@@ -3,14 +3,31 @@
 {% set active = "playback" %}
 
 {% block content %}
-{% for scene in sceneList %}
-    <form action="/playback" method="POST">
-        <label for="scene_name"><em>Scene Name: </em><strong>{{ scene }}</strong>
-        <button type="submit" name="start" value="{{ scene }}">Start</button>
-    </form>
-{% endfor %}
+    <style>
+        table, th, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+        }
+    </style>
 
-<form action="/playback" method="POST">
-    <button type="submit" name="stop" value="stop">Stop</button>
-</form>
+    <table>
+        <tr>
+            <th>Scene Name</th>
+            <th>Action</th>
+        </tr>
+        {% for scene in sceneList %}
+            <tr>
+                <td>{{ scene }}</td>
+                <td>
+                    <form action="/playback" method="POST">
+                        <button type="submit" name="start" value="{{ scene }}">Start</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+
+    <form action="/playback" method="POST">
+        <button type="submit" name="stop" value="stop">Stop</button>
+    </form>
 {% endblock %}
