@@ -34,6 +34,7 @@ class BackgroundProcess:
         isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
         if isInitialized <= 0:
             warnings.warn(message='DB not initialised',category=Warning)
+            #TODO stop thread
 
     def setupProcess(self):
         """Sets Up DB wit pid - call in process"""

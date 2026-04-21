@@ -23,6 +23,7 @@ db.init_app(app)
 signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 
 # start Recording and Playback Threads
+#check if db file exsists
 Dmx.ManageDmxData.startAsProcess(app.config['DATABASE'])
 
 
