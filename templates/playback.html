@@ -15,12 +15,13 @@
             <th>Scene Name</th>
             <th>Action</th>
         </tr>
-        {% for scene in sceneList %}
+        {% for (id,name) in sceneList %}
             <tr>
-                <td>{{ scene }}</td>
+                <td>{{ id }}</td>
+                <td>{{ name }}</td>
                 <td>
                     <form action="/playback" method="POST">
-                        <button type="submit" name="start" value="{{ scene }}">Start</button>
+                        <button type="submit" name="start" value="{{ id }}">Start</button>
                     </form>
                 </td>
             </tr>

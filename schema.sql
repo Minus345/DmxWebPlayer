@@ -1,25 +1,26 @@
-DROP TABLE IF EXISTS state;
 DROP TABLE IF EXISTS util;
+DROP TABLE IF EXISTS scene;
 DROP TABLE IF EXISTS frame;
-
-CREATE TABLE state
-(
-    status TEXT UNIQUE NOT NULL,
-    value  INTEGER     NOT NULL
-);
 
 CREATE TABLE util
 (
     name  TEXT UNIQUE NOT NULL,
     pid   INTEGER     NOT NULL,
-    scene TEXT
+    scene INTEGER
+);
+
+CREATE TABLE scene
+(
+    id   INTEGER PRIMARY KEY,
+    name Text NOT NULL
 );
 
 CREATE TABLE frame
 (
-    scenename TEXT    NOT NULL,
-    frameid   INTEGER NOT NULL,
+    id        INTEGER PRIMARY KEY,
+    scene     INTEGER,
+    count     INTEGER NOT NULL,
     timestamp INTEGER,
-    dmxdata   BLOB,
-    PRIMARY KEY (scenename, frameid)
+    data      BLOB,
+    FOREIGN KEY (scene) REFERENCES scene (id) ON DELETE CASCADE
 );

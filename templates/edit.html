@@ -32,16 +32,18 @@
 
     <table>
         <tr>
+            <th>Scene ID</th>
             <th>Scene Name</th>
             <th>Action</th>
         </tr>
-        {% for scene in sceneList %}
+        {% for (id,name) in sceneList %}
             <tr>
-                <td>{{ scene }}</td>
+                <td>{{ id }}</td>
+                <td>{{ name }}</td>
                 <td>
                     <form action="/edit" method="POST">
-                        <button type="submit" name="edit" value="{{ scene }}">Edit</button>
-                        <button type="submit" onclick="clicked(event)" name="delete" value="{{ scene }}">Delete</button>
+                        <button type="submit" name="edit" value="{{ id }}">Edit</button>
+                        <button type="submit" onclick="clicked(event)" name="delete" value="{{ id }}">Delete</button>
                     </form>
                 </td>
             </tr>

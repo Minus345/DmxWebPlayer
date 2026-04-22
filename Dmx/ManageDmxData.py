@@ -13,6 +13,7 @@ import sacn
 import Dmx
 from Dmx.StoreDmxData import Scene, Frame
 
+#TODO hier robuste db abfragen
 
 class BackgroundProcess:
     def __init__(self, processName: str, databasePath: str):
@@ -22,19 +23,20 @@ class BackgroundProcess:
         self.running = True
 
         ## init db
+        # TODO merge with db.get_db()
         self.db = sqlite3.connect(
             databasePath,
             detect_types=sqlite3.PARSE_DECLTYPES
         )
         self.db.row_factory = sqlite3.Row
-
+        self.db.execute("PRAGMA foreign_keys = ON;")
         cur = self.db.cursor()
 
         # check if db is initialized
         isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
         if isInitialized <= 0:
-            warnings.warn(message='DB not initialised',category=Warning)
-            #TODO stop thread
+            warnings.warn(message='DB not initialised', category=Warning)
+            # TODO stop thread
 
     def setupProcess(self):
         """Sets Up DB wit pid - call in process"""
@@ -67,6 +69,7 @@ class Recording(BackgroundProcess):
     def __init__(self, databasePath: str):
         super().__init__(Dmx.REC_NAME, databasePath)
         self.prevTimeStamp = 0.0
+        self.dbHandler = Dmx.DBHandler(self.db)
 
     def loop(self):
         super().loop()
@@ -77,16 +80,14 @@ class Recording(BackgroundProcess):
 
     def recordDmx(self):
         ## get scene name from db or shutdown request
-        cur = self.db.cursor()
-        name = cur.execute("""SELECT scene
-                              FROM util
-                              WHERE name == ?""", (Dmx.REC_NAME,)).fetchone()['scene']
+        name = self.dbHandler.getCurrantUtilName(Dmx.REC_NAME)
 
         if name == Dmx.SCENE_NONE:
             print("[REC] no scene name defined")
             self.dataAction = False
             return
         self.curScene = Scene(name)
+        self.curScene.dbCreateScene(self.db)
 
         ## start recording
         print("[REC] start recording: " + name)
@@ -119,18 +120,12 @@ class Recording(BackgroundProcess):
             signal.pause()
 
         print("[REC] stop recording")
-        ## put scene in db
-        self.curScene.putSceneInDb(self.db)
-
-        # allow nex recording
-        cur = self.db.cursor()
-        cur.execute("""UPDATE util
-                       SET scene = ?
-                       WHERE name = ?""", (Dmx.SCENE_NONE, Dmx.REC_NAME))
-        self.db.commit()
-
         receiver.leave_multicast(1)
         receiver.stop()
+        ## put scene in db
+        self.curScene.dbInsertDmxData(self.db)
+        # allow next recording
+        self.dbHandler.updateUtilDbSceneName(Dmx.REC_NAME, Dmx.SCENE_NONE)
 
 
 class Playback(BackgroundProcess):
@@ -184,7 +179,7 @@ class Playback(BackgroundProcess):
                 self.curScene.apply(output)
 
             self.sender[2].dmx_data = output
-            #TODO: only send changed data
+            # TODO: only send changed data
 
             # ---- 30 hz berechnung ----
             nextTime += self.PERIOD
@@ -196,26 +191,10 @@ class Playback(BackgroundProcess):
                 nextTime = time.perf_counter()
 
     def loadSceneFromDB(self) -> Scene:
-        # get scene out of db
-        cur = self.db.cursor()
-        name = cur.execute("""SELECT scene
-                              FROM util
-                              WHERE name == ?""", (Dmx.PLAY_NAME,)).fetchone()['scene']
-
-        if name == Dmx.SCENE_NONE:
+        curId = Dmx.DBHandler(self.db).getCurrantUtilName(Dmx.PLAY_NAME)
+        if curId == Dmx.SCENE_NONE:
             return self.defaultScene
-
-        # check if scene exists
-        exists = cur.execute("""SELECT COUNT(*)
-                                FROM frame
-                                WHERE scenename = ?""", (name,)).fetchone()[0]
-
-        if exists <= 0:
-            print("[PLAY] could not find scene: " + name + " . Returning to default scene")
-            return self.defaultScene
-
-        s = Scene(name)
-        s.getSceneOutOfDb(self.db)
+        s = Scene.loadFromDB(curId, self.db)
         return s
 
 
@@ -237,12 +216,3 @@ def initDB(db: Connection):
     cur.execute(
         "INSERT INTO util VALUES (?, ?, ?)", dataPlay)
     db.commit()
-
-
-if __name__ == '__main__':
-    # only for development and testing
-    # Recording().loop("/home/max/PycharmProjects/DmxWebPlayer/instance/flaskr.sqlite")
-    startAsProcess("/home/max/PycharmProjects/DmxWebPlayer/instance/flaskr.sqlite")
-    while True:
-        time.sleep(1)
-# Playback("/home/max/PycharmProjects/DmxWebPlayer/instance/flaskr.sqlite")

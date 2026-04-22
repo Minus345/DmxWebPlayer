@@ -1,6 +1,5 @@
 import pickle
 from sqlite3 import Connection
-from typing import List
 
 
 class Frame:
@@ -9,7 +8,7 @@ class Frame:
         self.step = 0
 
     def setTimeAfterPrevious(self, timeAfterPrevious: float):
-        self.step = round(timeAfterPrevious / 0.03)
+        self.step = round(timeAfterPrevious / 0.03)  # TODO magic value
 
 
 def getFrameInDbFormat(frame: Frame) -> bytes:
@@ -21,35 +20,48 @@ def getFrameInObjectFormat(data) -> list[int]:
 
 
 class Scene:
-    def __init__(self, name):
+    def __init__(self, name: str, frameList=None, sceneId=None):
         self.name = name
-        self.frameList: List[Frame] = list()
+        if frameList is None:
+            frameList = list()
+        self.frameList: list[Frame] = frameList
         self.frameCounter = 0
         self.sleepCounter = 0
+        self.id = sceneId
+
+    @classmethod
+    def createNew(cls, name):
+        return cls(name=name)
+
+    @classmethod
+    def loadFromDB(cls, sceneID: int, db: Connection):
+        cur = db.cursor()
+        name = cur.execute("SELECT name FROM scene WHERE id = ?", (sceneID,)).fetchone()[0]  # TODO error handling db
+        frameCount = cur.execute("SELECT COUNT(*) FROM frame WHERE scene = ?", (sceneID,)).fetchone()[0]
+        frameList = list[Frame]()
+        for i in range(0, frameCount):
+            frameData = cur.execute("SELECT * FROM frame WHERE scene = ? AND count = ?", (sceneID, i,)).fetchone()
+            frame = Frame(getFrameInObjectFormat(frameData['data']))
+            frame.step = frameData['timestamp']
+            frameList.append(frame)
+        return cls(name=name, frameList=frameList, sceneId=sceneID)
 
     def addFrame(self, frame: Frame):
         self.frameList.append(frame)
 
-        # TODO put object directly in db wie SQLAlchemy
-
-    def putSceneInDb(self, db: Connection):
+    def dbCreateScene(self, db: Connection):
         cur = db.cursor()
-        for i in range(0, len(self.frameList)):
-            data = (self.name, i, self.frameList[i].step, getFrameInDbFormat(self.frameList[i]))
-            cur.execute(
-                "INSERT INTO frame VALUES (?, ?, ?,?)", data)
+        cur.execute("INSERT INTO scene VALUES (NULL,?)", (self.name,))
+        self.id = cur.lastrowid
         db.commit()
 
-    def getSceneOutOfDb(self, db: Connection):
-        """load scene from db. Create empty scene first, this only appends all frames found in the db"""
+    def dbInsertDmxData(self, db: Connection):
         cur = db.cursor()
-        frameCount = cur.execute("SELECT COUNT(*) FROM frame WHERE scenename = ?", (self.name,)).fetchone()[0]
-        for i in range(0, frameCount):
-            frameData = cur.execute("SELECT * FROM frame WHERE scenename = ? AND frameid = ?", (self.name, i,)).fetchone()
-            frame = Frame(getFrameInObjectFormat(frameData['dmxdata']))
-            frame.step = frameData['timestamp']
-            self.frameList.append(frame)
-
+        for i in range(0, len(self.frameList)):
+            data = (self.id, i, self.frameList[i].step, getFrameInDbFormat(self.frameList[i]))
+            cur.execute(
+                "INSERT INTO frame VALUES (NULL,?,?,?,?)", data)
+        db.commit()
 
     def apply(self, output: list[int]):
         self.sleepCounter += 1
