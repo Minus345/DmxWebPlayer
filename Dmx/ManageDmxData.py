@@ -2,6 +2,7 @@ import multiprocessing as mp
 import os
 import signal
 import sqlite3
+import sys
 import threading
 import time
 import warnings
@@ -9,7 +10,6 @@ from sqlite3 import Connection
 from threading import Thread
 
 import sacn
-import sys
 
 import Dmx
 from Dmx.StoreDmxData import Scene, Frame
@@ -39,10 +39,10 @@ class BackgroundProcess:
         try:
             isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
             if isInitialized <= 0:
-                warnings.warn(message='DB not initialised with values. Disabling Dmx: ' + processName + 'pleas init db', category=Warning)
+                warnings.warn(message='DB not initialised with values. Disabling Dmx: ' + processName + ' pleas init db', category=Warning)
                 sys.exit(1)
         except sqlite3.OperationalError:
-            warnings.warn(message='DB not initialised with tables.  Disabling Dmx: ' + processName + 'pleas init db', category=Warning)
+            warnings.warn(message='DB not initialised with tables.  Disabling Dmx: ' + processName + ' pleas init db', category=Warning)
             sys.exit(1)
 
         # put ip data in util table
@@ -73,7 +73,6 @@ class Recording(BackgroundProcess):
         self.prevTimeStamp = 0.0
         self.dbHandler = Dmx.DBHandler(self.db)
 
-    def loop(self):
         while self.running:
             signal.pause()
             if self.dataAction:
@@ -123,8 +122,12 @@ class Recording(BackgroundProcess):
         print("[REC] stop recording")
         receiver.leave_multicast(1)
         receiver.stop()
-        ## put scene in db
-        self.curScene.dbInsertDmxData(self.db)
+
+        if len(self.curScene.frameList) != 0:
+            ## put scene in db
+            self.curScene.dbInsertDmxData(self.db)
+        else:
+            print("[REC] scene has no data")
         # allow next recording
         self.dbHandler.updateUtilDbSceneName(Dmx.REC_NAME, Dmx.SCENE_NONE)
 
@@ -153,11 +156,8 @@ class Playback(BackgroundProcess):
 
         self.sender = sacn.sACNsender(fps=self.TARGET_HZ)
         self.senderThread = Thread(target=self.senderWorker, args=(), daemon=True)
-
         self.senderThread.start()
-        self.managingWorker()
 
-    def managingWorker(self):
         while self.running:
             signal.pause()
             if self.notifyFlag:

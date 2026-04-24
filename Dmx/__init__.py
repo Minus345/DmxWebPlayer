@@ -1,8 +1,6 @@
-import multiprocessing
 import os
 import signal
 import sqlite3
-import sys
 import warnings
 
 from Dmx import ManageDmxData
@@ -19,7 +17,7 @@ This is the Interface for all the DMX Recording/Playback
 def startBackgroundProcesses(dbPath: str):
     # check if db file exists
     if not os.path.exists(dbPath):
-        warnings.warn(message='DB not existing. Pleas run db init command', category=Warning)
+        warnings.warn(message='DB not existing. Pleas run db init command. Disabling Dmx Playback/Recording', category=Warning)
         return
     ManageDmxData.startAsProcess(dbPath)
 
