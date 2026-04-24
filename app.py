@@ -1,5 +1,6 @@
 import os
 import signal
+from time import sleep
 
 from flask import Flask, request
 from flask import render_template
@@ -15,13 +16,13 @@ app.config.from_mapping(
 # ensure the instance folder exists
 os.makedirs(app.instance_path, exist_ok=True)
 import db
-
 db.init_app(app)
 
 signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 
 # start Recording and Playback Threads
 Dmx.startBackgroundProcesses(app.config['DATABASE'])
+sleep(100)
 
 
 @app.route('/')

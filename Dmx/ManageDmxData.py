@@ -9,6 +9,7 @@ from sqlite3 import Connection
 from threading import Thread
 
 import sacn
+import sys
 
 import Dmx
 from Dmx.StoreDmxData import Scene, Frame
@@ -33,10 +34,14 @@ class BackgroundProcess:
         cur = self.db.cursor()
 
         # check if db is initialized
-        isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
-        if isInitialized <= 0:
-            warnings.warn(message='DB not initialised', category=Warning)
-            # TODO stop thread
+        try:
+            isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
+            if isInitialized <= 0:
+                warnings.warn(message='DB not initialised with values', category=Warning)
+                sys.exit(1)
+        except sqlite3.OperationalError:
+            warnings.warn(message='DB not initialised with tables', category=Warning)
+            sys.exit(1)
 
     def setupProcess(self):
         """Sets Up DB wit pid - call in process"""

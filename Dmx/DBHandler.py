@@ -4,8 +4,6 @@ from typing import Any
 import Dmx
 from db import get_db
 
-# TODO move into DMX module
-
 TABLE_SCENE = "scene"
 TABLE_FRAME = "frame"
 TABLE_UTIL = "util"
