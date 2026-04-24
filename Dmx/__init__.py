@@ -19,7 +19,7 @@ This is the Interface for all the DMX Recording/Playback
 def startBackgroundProcesses(dbPath: str):
     # check if db file exists
     if not os.path.exists(dbPath):
-        warnings.warn(message='DB not existing', category=Warning)
+        warnings.warn(message='DB not existing. Pleas run db init command', category=Warning)
         return
     ManageDmxData.startAsProcess(dbPath)
 

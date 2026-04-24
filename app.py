@@ -1,6 +1,5 @@
 import os
 import signal
-from time import sleep
 
 from flask import Flask, request
 from flask import render_template
@@ -22,8 +21,6 @@ signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 
 # start Recording and Playback Threads
 Dmx.startBackgroundProcesses(app.config['DATABASE'])
-sleep(100)
-
 
 @app.route('/')
 def index():

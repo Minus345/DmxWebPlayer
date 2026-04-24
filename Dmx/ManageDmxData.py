@@ -14,10 +14,12 @@ import sys
 import Dmx
 from Dmx.StoreDmxData import Scene, Frame
 
-#TODO hier robuste db abfragen
+
+# TODO hier robuste db abfragen
 
 class BackgroundProcess:
     def __init__(self, processName: str, databasePath: str):
+        """Sets Up DB wit pid - call in process"""
         self.curScene = None
         self.processName = processName
         self.dataAction = False
@@ -37,15 +39,13 @@ class BackgroundProcess:
         try:
             isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
             if isInitialized <= 0:
-                warnings.warn(message='DB not initialised with values', category=Warning)
+                warnings.warn(message='DB not initialised with values. Disabling Dmx: ' + processName + 'pleas init db', category=Warning)
                 sys.exit(1)
         except sqlite3.OperationalError:
-            warnings.warn(message='DB not initialised with tables', category=Warning)
+            warnings.warn(message='DB not initialised with tables.  Disabling Dmx: ' + processName + 'pleas init db', category=Warning)
             sys.exit(1)
 
-    def setupProcess(self):
-        """Sets Up DB wit pid - call in process"""
-        cur = self.db.cursor()
+        # put ip data in util table
         data = (os.getpid(), Dmx.SCENE_NONE, self.processName)
         cur.execute(
             "UPDATE util SET pid = ?, scene = ? WHERE name = ?", data)
@@ -66,9 +66,6 @@ class BackgroundProcess:
         print(f"shutdown {self.processName}")
         self.running = False
 
-    def loop(self):
-        self.setupProcess()
-
 
 class Recording(BackgroundProcess):
     def __init__(self, databasePath: str):
@@ -77,7 +74,6 @@ class Recording(BackgroundProcess):
         self.dbHandler = Dmx.DBHandler(self.db)
 
     def loop(self):
-        super().loop()
         while self.running:
             signal.pause()
             if self.dataAction:
@@ -148,7 +144,6 @@ class Playback(BackgroundProcess):
 
     def __init__(self, databasePath: str):
         super().__init__(Dmx.PLAY_NAME, databasePath)
-        super().setupProcess()
         self.curSceneLock = threading.Lock()
         self.notifyFlag = False
 
@@ -205,8 +200,7 @@ class Playback(BackgroundProcess):
 
 def startAsProcess(databasePath: str):
     contextMultiprocessing = mp.get_context('fork')
-    rec = Recording(databasePath)
-    runningProcess1 = contextMultiprocessing.Process(target=rec.loop, daemon=True)
+    runningProcess1 = contextMultiprocessing.Process(target=Recording, daemon=True, args=(databasePath,))
     runningProcess2 = contextMultiprocessing.Process(target=Playback, daemon=True, args=(databasePath,))
     runningProcess1.start()
     runningProcess2.start()
