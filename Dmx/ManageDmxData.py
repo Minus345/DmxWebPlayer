@@ -173,13 +173,16 @@ class Playback(BackgroundProcess):
 
         nextTime = time.perf_counter()
         output = [0] * 512
+        old = [1] * 512
 
         while self.running:
             with self.curSceneLock:
                 self.curScene.apply(output)
 
-            self.sender[2].dmx_data = output
-            # TODO: only send changed data
+            # only send new data
+            if output != old:
+                self.sender[2].dmx_data = output
+                old = output[:]
 
             # ---- 30 hz berechnung ----
             nextTime += self.PERIOD
