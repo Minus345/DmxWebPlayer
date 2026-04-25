@@ -93,14 +93,16 @@ class Recording:
         receiver.stop()
 
         if len(self.curScene.frameList) != 0:
-            ## put scene in db
+            #only save first frame when scene is static
+            if self.curScene.static:
+                firstElement = self.curScene.frameList[0]
+                self.curScene.frameList = [firstElement,]
             self.curScene.dbInsertDmxData(self.db)
         else:
             print("[REC] scene has no data")
 
 
 class Playback:
-    # TODO: Static scene
     TARGET_HZ = 30
     PERIOD = 1.0 / TARGET_HZ
 
@@ -113,7 +115,7 @@ class Playback:
         self.pipe = pipe
         self.curSceneLock = threading.Lock()
 
-        self.defaultScene = Scene("Default Scene")
+        self.defaultScene = Scene("Default Scene", static=True)
         self.defaultScene.addFrame(Frame([0] * 512))
         self.curScene = self.defaultScene
 
@@ -178,14 +180,3 @@ def startAsProcess(databasePath: str):
     runningProcess1.start()
     runningProcess2.start()
     return parentConnRec, parentConnPlay
-
-
-def initDB(db: Connection):
-    cur = db.cursor()
-    dataRec = (Dmx.REC_NAME, 0, Dmx.SCENE_NONE)
-    dataPlay = (Dmx.PLAY_NAME, 0, Dmx.SCENE_NONE)
-    cur.execute(
-        "INSERT INTO util VALUES (?, ?, ?)", dataRec)
-    cur.execute(
-        "INSERT INTO util VALUES (?, ?, ?)", dataPlay)
-    db.commit()
