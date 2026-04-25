@@ -1,7 +1,11 @@
+import multiprocessing
 import os
 import signal
 import sqlite3
+import sys
+import threading
 import warnings
+from typing import Any
 
 from Dmx import ManageDmxData
 from Dmx.DBHandler import DBHandler
@@ -10,62 +14,76 @@ REC_NAME = "rec"
 PLAY_NAME = "play"
 SCENE_NONE = 0
 
+START_REC = "start"
+STOP_REC = "stop"
+STOP_PLAY = "stop"
+POISONING = "poisonPill"
+
 """
-This is the Interface for all the DMX Recording/Playback
+This is the Interface for all the DMX Recording/Playback, this is thread-save
 """
+pipeToRec: multiprocessing.connection.Connection
+pipeToPlay: multiprocessing.connection.Connection
+pipeToRecLock = threading.Lock()
+pipeToPlayLock = threading.Lock()
+
+
+def shutdownHandler(signum, frame):
+    # we probably overite the flask SIGINT handler so we have to call sys.exit to shut down flaks
+    print("-------- shutting down --------")
+    sendIntoPipeRec((POISONING,))
+    sendIntoPipePlay(POISONING)
+    sys.exit(0)
+
 
 def startBackgroundProcesses(dbPath: str):
+    signal.signal(signal.SIGINT, shutdownHandler)
+
     # check if db file exists
     if not os.path.exists(dbPath):
         warnings.warn(message='DB not existing. Pleas run db init command. Disabling Dmx Playback/Recording', category=Warning)
         return
-    ManageDmxData.startAsProcess(dbPath)
+    global pipeToRec, pipeToPlay
+    pipeToRec, pipeToPlay = ManageDmxData.startAsProcess(dbPath)
 
 
-class _Base:
-    def __init__(self, db: sqlite3.Connection):
-        self.dbHandler = DBHandler(db)
+def sendIntoPipeRec(obj: Any):
+    global pipeToRecLock
+    with pipeToRecLock:
+        global pipeToRec
+        pipeToRec.send(obj)
 
 
-class Editor(_Base):
-    def __init__(self, db: sqlite3.Connection):
-        super().__init__(db)
-        self.pidReceiverProcess = self.dbHandler.getPidFromProcess(REC_NAME)
-
-    def startRecordingNewScene(self, sceneId):
-        self.dbHandler.updateUtilDbSceneName(REC_NAME, sceneId)
-        os.kill(self.pidReceiverProcess, signal.SIGUSR1)
-
-    def stopRecordingNewScene(self):
-        os.kill(self.pidReceiverProcess, signal.SIGUSR2)
-
-    def deleteScene(self, sceneId: int):
-        self.dbHandler.deleteScene(sceneId)
+def sendIntoPipePlay(obj: Any):
+    global pipeToPlayLock
+    with pipeToPlayLock:
+        global pipeToPlay
+        pipeToPlay.send(obj)
 
 
-class Player(_Base):
-    def __init__(self, db: sqlite3.Connection):
-        super().__init__(db)
-
-    def startPlayer(self, sceneId: int):
-        self.dbHandler.updateUtilDbSceneName(PLAY_NAME, sceneId)
-        self.__activateStart()
-
-    def stopPlayer(self):
-        self.dbHandler.updateUtilDbSceneName(PLAY_NAME, SCENE_NONE)
-        self.__activateStart()
-
-    def __activateStart(self):
-        pidReceiverProcess = self.dbHandler.getPidFromProcess(PLAY_NAME)
-        os.kill(pidReceiverProcess, signal.SIGUSR1)
+def startRecordingNewScene(sceneName, static: bool = False):
+    sendIntoPipeRec((START_REC, sceneName, static))
 
 
-class Viewer(_Base):
-    def __init__(self, db: sqlite3.Connection):
-        super().__init__(db)
+def stopRecordingNewScene():
+    sendIntoPipeRec((STOP_REC,))
 
-    def getCurrantRecording(self) -> str:
-        return self.dbHandler.getCurrantUtilName(REC_NAME)
 
-    def getCurrantScenes(self) -> list[tuple[int, int]]:
-        return self.dbHandler.getCurrantScenes()
+def deleteScene(db: sqlite3.Connection, sceneId: int):
+    DBHandler(db).deleteScene(sceneId)
+
+
+def startPlayer(sceneId: int):
+    sendIntoPipePlay(sceneId)
+
+
+def stopPlayer():
+    sendIntoPipePlay(STOP_PLAY)
+
+
+def getCurrantRecording(db: sqlite3.Connection, ) -> str:
+    return "TODO"
+
+
+def getCurrantScenes(db: sqlite3.Connection, ) -> list[tuple[int, int]]:
+    return DBHandler(db).getCurrantScenes()

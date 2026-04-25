@@ -1,11 +1,10 @@
 import multiprocessing as mp
-import os
 import signal
 import sqlite3
 import sys
 import threading
 import time
-import warnings
+from multiprocessing.connection import Pipe
 from sqlite3 import Connection
 from threading import Thread
 
@@ -15,82 +14,46 @@ import Dmx
 from Dmx.StoreDmxData import Scene, Frame
 
 
-# TODO hier robuste db abfragen
+def setupDbConnection(databasePath: str):
+    # TODO merge with db.get_db()
+    db = sqlite3.connect(
+        databasePath,
+        detect_types=sqlite3.PARSE_DECLTYPES
+    )
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys = ON;")
+    return db
 
-class BackgroundProcess:
-    def __init__(self, processName: str, databasePath: str):
-        """Sets Up DB wit pid - call in process"""
+
+class Recording:
+    def __init__(self, databasePath: str, pipe):
+        self.db = setupDbConnection(databasePath)
         self.curScene = None
-        self.processName = processName
-        self.dataAction = False
-        self.running = True
-
-        ## init db
-        # TODO merge with db.get_db()
-        self.db = sqlite3.connect(
-            databasePath,
-            detect_types=sqlite3.PARSE_DECLTYPES
-        )
-        self.db.row_factory = sqlite3.Row
-        self.db.execute("PRAGMA foreign_keys = ON;")
-        cur = self.db.cursor()
-
-        # check if db is initialized
-        try:
-            isInitialized = cur.execute("SELECT COUNT(*) FROM util WHERE name = ?", (self.processName,)).fetchone()[0]
-            if isInitialized <= 0:
-                warnings.warn(message='DB not initialised with values. Disabling Dmx: ' + processName + ' pleas init db', category=Warning)
-                sys.exit(1)
-        except sqlite3.OperationalError:
-            warnings.warn(message='DB not initialised with tables.  Disabling Dmx: ' + processName + ' pleas init db', category=Warning)
-            sys.exit(1)
-
-        # put ip data in util table
-        data = (os.getpid(), Dmx.SCENE_NONE, self.processName)
-        cur.execute(
-            "UPDATE util SET pid = ?, scene = ? WHERE name = ?", data)
-        self.db.commit()
-
-        signal.signal(signal.SIGUSR1, self.sigHandlerStart)
-        signal.signal(signal.SIGUSR2, self.sigHandlerStop)
-        signal.signal(signal.SIGTERM, self.shutdownHandler)
-        signal.signal(signal.SIGINT, self.shutdownHandler)
-
-    def sigHandlerStart(self, signum, frame):
-        self.dataAction = True
-
-    def sigHandlerStop(self, signum, frame):
-        self.dataAction = False
-
-    def shutdownHandler(self, signum, frame):
-        print(f"shutdown {self.processName}")
-        self.running = False
-
-
-class Recording(BackgroundProcess):
-    def __init__(self, databasePath: str):
-        super().__init__(Dmx.REC_NAME, databasePath)
+        self.pipe = pipe
         self.prevTimeStamp = 0.0
         self.dbHandler = Dmx.DBHandler(self.db)
+        self.running = True
+
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         while self.running:
-            signal.pause()
-            if self.dataAction:
-                self.recordDmx()
+            data = pipe.recv()
+            if data[0] == Dmx.POISONING:
+                break
+            if data[0] == Dmx.START_REC:
+                self.recordDmx(data[1], data[2])
 
-    def recordDmx(self):
-        ## get scene name from db or shutdown request
-        name = self.dbHandler.getCurrantUtilName(Dmx.REC_NAME)
+        pipe.close()
+        print("[REC] off")
+        sys.exit(0)
 
-        if name == Dmx.SCENE_NONE:
-            print("[REC] no scene name defined")
-            self.dataAction = False
-            return
-        self.curScene = Scene(name)
+    def recordDmx(self, sceneName: str, static: bool):
+        self.curScene = Scene(sceneName, static=True)
         self.curScene.dbCreateScene(self.db)
 
         ## start recording
-        print("[REC] start recording: " + name)
+        print("[REC] start recording: " + sceneName)
 
         receiver = sacn.sACNreceiver(bind_address='192.168.188.20')
 
@@ -115,9 +78,15 @@ class Recording(BackgroundProcess):
         receiver.start()
         receiver.join_multicast(1)
 
-        # sleep til signal received and handler ist triggerd
-        while self.dataAction and self.running:
-            signal.pause()
+        while True:
+            data = self.pipe.recv()
+            if data[0] == Dmx.POISONING:
+                self.running = False
+                break
+            if data[0] == Dmx.STOP_REC:
+                break
+            else:
+                print("[REC] currently recording: " + sceneName)
 
         print("[REC] stop recording")
         receiver.leave_multicast(1)
@@ -128,27 +97,21 @@ class Recording(BackgroundProcess):
             self.curScene.dbInsertDmxData(self.db)
         else:
             print("[REC] scene has no data")
-        # allow next recording
-        self.dbHandler.updateUtilDbSceneName(Dmx.REC_NAME, Dmx.SCENE_NONE)
 
 
-class Playback(BackgroundProcess):
+class Playback:
     # TODO: Static scene
     TARGET_HZ = 30
     PERIOD = 1.0 / TARGET_HZ
 
-    def sigHandlerStart(self, signum, frame):
-        self.notifyFlag = True
+    def __init__(self, databasePath: str, pipe):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    def shutdownHandler(self, signum, frame):
-        super().shutdownHandler(signum, frame)
-        # sender stop when shutdown
-        self.sender.stop()
-
-    def __init__(self, databasePath: str):
-        super().__init__(Dmx.PLAY_NAME, databasePath)
+        self.db = setupDbConnection(databasePath)
+        self.running = True
+        self.pipe = pipe
         self.curSceneLock = threading.Lock()
-        self.notifyFlag = False
 
         self.defaultScene = Scene("Default Scene")
         self.defaultScene.addFrame(Frame([0] * 512))
@@ -159,12 +122,24 @@ class Playback(BackgroundProcess):
         self.senderThread.start()
 
         while self.running:
-            signal.pause()
-            if self.notifyFlag:
-                newScene = self.loadSceneFromDB()
+            data = self.pipe.recv()
+            if data == Dmx.POISONING:
+                break
+            elif data == Dmx.STOP_PLAY:
                 with self.curSceneLock:
-                    self.curScene = newScene
-                self.notifyFlag = False
+                    self.curScene = self.defaultScene
+            else:
+                #TODO check if scene exists, else return error into pipe
+                nextScene = Scene.loadFromDB(data, self.db)
+                if len(nextScene.frameList) == 0:
+                    print("[PLAY] scene has no data - starting default scene")
+                    nextScene = self.defaultScene
+                with self.curSceneLock:
+                    self.curScene = nextScene
+
+        self.sender.stop()
+        self.pipe.close()
+        sys.exit(0)
 
     def senderWorker(self):
         self.sender.start()
@@ -193,20 +168,16 @@ class Playback(BackgroundProcess):
                 # Wir sind zu langsam → Frame skippen
                 nextTime = time.perf_counter()
 
-    def loadSceneFromDB(self) -> Scene:
-        curId = Dmx.DBHandler(self.db).getCurrantUtilName(Dmx.PLAY_NAME)
-        if curId == Dmx.SCENE_NONE:
-            return self.defaultScene
-        s = Scene.loadFromDB(curId, self.db)
-        return s
-
 
 def startAsProcess(databasePath: str):
+    parentConnRec, childConnRec = Pipe()
+    parentConnPlay, childConnPlay = Pipe()
     contextMultiprocessing = mp.get_context('fork')
-    runningProcess1 = contextMultiprocessing.Process(target=Recording, daemon=True, args=(databasePath,))
-    runningProcess2 = contextMultiprocessing.Process(target=Playback, daemon=True, args=(databasePath,))
+    runningProcess1 = contextMultiprocessing.Process(target=Recording, daemon=True, args=(databasePath, childConnRec,))
+    runningProcess2 = contextMultiprocessing.Process(target=Playback, daemon=True, args=(databasePath, childConnPlay))
     runningProcess1.start()
     runningProcess2.start()
+    return parentConnRec, parentConnPlay
 
 
 def initDB(db: Connection):

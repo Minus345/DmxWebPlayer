@@ -6,13 +6,14 @@ CREATE TABLE util
 (
     name  TEXT UNIQUE NOT NULL,
     pid   INTEGER     NOT NULL,
-    scene INTEGER
+    scene TEXT
 );
 
 CREATE TABLE scene
 (
-    id   INTEGER PRIMARY KEY,
-    name Text NOT NULL
+    id     INTEGER PRIMARY KEY,
+    name   Text    NOT NULL,
+    static INTEGER NOT NULL
 );
 
 CREATE TABLE frame

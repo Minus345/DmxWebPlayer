@@ -20,7 +20,7 @@ def getFrameInObjectFormat(data) -> list[int]:
 
 
 class Scene:
-    def __init__(self, name: str, frameList=None, sceneId=None):
+    def __init__(self, name: str, frameList=None, sceneId=None, static: bool = False):
         self.name = name
         if frameList is None:
             frameList = list()
@@ -28,6 +28,7 @@ class Scene:
         self.frameCounter = 0
         self.sleepCounter = 0
         self.id = sceneId
+        self.static = static
 
     @classmethod
     def createNew(cls, name):
