@@ -55,7 +55,7 @@ class Recording:
         ## start recording
         print("[REC] start recording: " + sceneName)
 
-        receiver = sacn.sACNreceiver(bind_address='192.168.188.20')
+        receiver = sacn.sACNreceiver(bind_address='192.168.188.20') #TODO make it configurable
 
         @receiver.listen_on('universe', universe=1)
         def callback(packet):  # packet type: sacn.DataPacket
