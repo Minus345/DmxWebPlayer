@@ -1,13 +1,5 @@
-DROP TABLE IF EXISTS util;
 DROP TABLE IF EXISTS scene;
 DROP TABLE IF EXISTS frame;
-
-CREATE TABLE util
-(
-    name  TEXT UNIQUE NOT NULL,
-    pid   INTEGER     NOT NULL,
-    scene TEXT
-);
 
 CREATE TABLE scene
 (

@@ -1,5 +1,6 @@
 import os
 import signal
+from asyncio import log
 
 from flask import Flask, request
 from flask import render_template
@@ -31,7 +32,6 @@ def index():
 
 @app.route('/edit', methods=['GET', 'POST'])
 def edit():
-    print(request.form)
     if request.method == 'POST':
         if request.form.get('sceneName') is not None:
             sceneName = request.form.get('sceneName')
@@ -57,14 +57,14 @@ def edit():
 
 @app.route('/playback', methods=['GET', 'POST'])
 def playback():
-    print(request.form)
+    logging = ""
     if request.method == 'POST':
         start = request.form.get('start')
         stop = request.form.get('stop')
         if start is not None:
-            Dmx.startPlayer(int(start))
+            logging = Dmx.startPlayer(int(start))
 
         if stop is not None:
             Dmx.stopPlayer()
 
-    return render_template('playback.html', curRecording=Dmx.getCurrantRecording(db.get_db()), sceneList=Dmx.getCurrantScenes(db.get_db()))
+    return render_template('playback.html', curRecording=Dmx.getCurrantRecording(db.get_db()), sceneList=Dmx.getCurrantScenes(db.get_db()), log=logging)

@@ -1,4 +1,5 @@
 import pickle
+from os import name
 from sqlite3 import Connection
 
 
@@ -36,8 +37,11 @@ class Scene:
 
     @classmethod
     def loadFromDB(cls, sceneID: int, db: Connection):
+        """loads a scene from db, be sure that the scene exists"""
         cur = db.cursor()
-        name = cur.execute("SELECT name FROM scene WHERE id = ?", (sceneID,)).fetchone()[0]  # TODO error handling db
+        sceneData= cur.execute("SELECT * FROM scene WHERE id = ?", (sceneID,)).fetchone()
+        sceneName = sceneData['name']
+        static = sceneData['static']
         frameCount = cur.execute("SELECT COUNT(*) FROM frame WHERE scene = ?", (sceneID,)).fetchone()[0]
         frameList = list[Frame]()
         for i in range(0, frameCount):
@@ -45,14 +49,14 @@ class Scene:
             frame = Frame(getFrameInObjectFormat(frameData['data']))
             frame.step = frameData['timestamp']
             frameList.append(frame)
-        return cls(name=name, frameList=frameList, sceneId=sceneID)
+        return cls(name=sceneName, frameList=frameList, sceneId=sceneID, static=static)
 
     def addFrame(self, frame: Frame):
         self.frameList.append(frame)
 
     def dbCreateScene(self, db: Connection):
         cur = db.cursor()
-        cur.execute("INSERT INTO scene VALUES (NULL,?)", (self.name,))
+        cur.execute("INSERT INTO scene VALUES (NULL,?,?)", (self.name,self.static))
         self.id = cur.lastrowid
         db.commit()
 

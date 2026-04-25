@@ -4,8 +4,8 @@ import sqlite3
 import sys
 import threading
 import time
+from itertools import count
 from multiprocessing.connection import Pipe
-from sqlite3 import Connection
 from threading import Thread
 
 import sacn
@@ -49,7 +49,7 @@ class Recording:
         sys.exit(0)
 
     def recordDmx(self, sceneName: str, static: bool):
-        self.curScene = Scene(sceneName, static=True)
+        self.curScene = Scene(sceneName, static=static)
         self.curScene.dbCreateScene(self.db)
 
         ## start recording
@@ -93,10 +93,10 @@ class Recording:
         receiver.stop()
 
         if len(self.curScene.frameList) != 0:
-            #only save first frame when scene is static
+            # only save first frame when scene is static
             if self.curScene.static:
                 firstElement = self.curScene.frameList[0]
-                self.curScene.frameList = [firstElement,]
+                self.curScene.frameList = [firstElement, ]
             self.curScene.dbInsertDmxData(self.db)
         else:
             print("[REC] scene has no data")
@@ -124,18 +124,32 @@ class Playback:
         self.senderThread.start()
 
         while self.running:
-            data = self.pipe.recv()
-            if data == Dmx.POISONING:
+            pipeData = self.pipe.recv()
+
+            """
+            pipeData values:
+            - scene id :int
+            - POISONING
+            - STOP_PLAY
+            """
+
+            if pipeData == Dmx.POISONING:
                 break
-            elif data == Dmx.STOP_PLAY:
+            elif pipeData == Dmx.STOP_PLAY:
                 with self.curSceneLock:
                     self.curScene = self.defaultScene
             else:
-                #TODO check if scene exists, else return error into pipe
-                nextScene = Scene.loadFromDB(data, self.db)
+                exists = self.db.execute("""SELECT COUNT(*)FROM scene WHERE id = ?""", (pipeData,)).fetchone()[0]
+                if exists == 0:
+                    pipe.send("Couldn't find scene, pleas refresh your browser")
+                    continue
+
+                nextScene = Scene.loadFromDB(pipeData, self.db)
                 if len(nextScene.frameList) == 0:
-                    print("[PLAY] scene has no data - starting default scene")
-                    nextScene = self.defaultScene
+                    pipe.send("scene has no data")
+                    continue
+
+                pipe.send(f"starting scene: {nextScene.name}")
                 with self.curSceneLock:
                     self.curScene = nextScene
 

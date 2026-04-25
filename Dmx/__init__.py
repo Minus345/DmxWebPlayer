@@ -31,8 +31,8 @@ pipeToPlayLock = threading.Lock()
 def shutdownHandler(signum, frame):
     # we probably overite the flask SIGINT handler so we have to call sys.exit to shut down flaks
     print("-------- shutting down --------")
-    sendIntoPipeRec((POISONING,))
-    sendIntoPipePlay(POISONING)
+    __sendIntoPipeRec((POISONING,))
+    __sendIntoPipePlay(POISONING)
     sys.exit(0)
 
 
@@ -47,38 +47,48 @@ def startBackgroundProcesses(dbPath: str):
     pipeToRec, pipeToPlay = ManageDmxData.startAsProcess(dbPath)
 
 
-def sendIntoPipeRec(obj: Any):
+def __sendIntoPipeRec(obj: Any):
     global pipeToRecLock
     with pipeToRecLock:
         global pipeToRec
         pipeToRec.send(obj)
 
 
-def sendIntoPipePlay(obj: Any):
+def __sendIntoPipePlay(obj: Any):
     global pipeToPlayLock
     with pipeToPlayLock:
         global pipeToPlay
         pipeToPlay.send(obj)
 
 
+def __getFromPipePlay() -> Any:
+    global pipeToPlayLock
+    with pipeToPlayLock:
+        global pipeToPlay
+        return pipeToPlay.recv()
+
+
+
 def startRecordingNewScene(sceneName, static: bool = False):
-    sendIntoPipeRec((START_REC, sceneName, static))
+    __sendIntoPipeRec((START_REC, sceneName, static))
 
 
 def stopRecordingNewScene():
-    sendIntoPipeRec((STOP_REC,))
+    __sendIntoPipeRec((STOP_REC,))
 
 
 def deleteScene(db: sqlite3.Connection, sceneId: int):
     DBHandler(db).deleteScene(sceneId)
 
 
-def startPlayer(sceneId: int):
-    sendIntoPipePlay(sceneId)
+def startPlayer(sceneId: int) -> str:
+    """starts scene with sceneId. Returns Error message or started message """
+    __sendIntoPipePlay(sceneId)
+    return __getFromPipePlay()
 
 
 def stopPlayer():
-    sendIntoPipePlay(STOP_PLAY)
+    __sendIntoPipePlay(STOP_PLAY)
 
 
 def getCurrantRecording(db: sqlite3.Connection, ) -> str:
