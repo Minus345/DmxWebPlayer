@@ -4,8 +4,6 @@ from datetime import datetime
 import click
 from flask import current_app, g
 
-import Dmx.ManageDmxData
-
 
 def init_app(app):
     app.teardown_appcontext(close_db)
