@@ -27,7 +27,7 @@ Dmx.startBackgroundProcesses(app.config['DATABASE'])
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('playback.html', curRecording=Dmx.getCurrantRecording(db.get_db()), sceneList=Dmx.getCurrantScenes(db.get_db()), log="started ...")
 
 
 @app.route('/edit', methods=['GET', 'POST'])

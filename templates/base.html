@@ -9,8 +9,9 @@
             --bg: #121212;
             --fg: #e5e5e5;
             --tab-bg: #1e1e1e;
-            --tab-border: #333;
-            --content-bg: #181818;
+            --tab-border: #7e7d7d;
+            --content-bg: #2d2d2d;
+            --lila: #8e05ff;
         }
 
         body {
@@ -20,20 +21,28 @@
             color: var(--fg);
         }
 
+        .header {
+            font-size: 50px;
+            padding-left: 10px;
+            padding-bottom: 10px;
+            font-family: Arial, Helvetica, serif;
+            color: var(--lila);
+        }
+
         .tabs {
             display: flex;
-            border-bottom: 1px solid var(--tab-border);
-            margin-bottom: 15px;
+            position: relative;
+            top: 1px; /* Tabs überdecken die Content-Border */
         }
 
         .tab {
-            padding: 10px 20px;
+            padding: 10px 30px;
             border: 1px solid var(--tab-border);
-            border-bottom: none;
             margin-right: 5px;
             background: var(--tab-bg);
             text-decoration: none;
             color: var(--fg);
+            border-radius: 10px 10px 0 0;
         }
 
         .tab:hover {
@@ -43,17 +52,24 @@
         .active {
             background: var(--content-bg);
             font-weight: bold;
+            border-bottom: none;
         }
 
         .content {
             border: 1px solid var(--tab-border);
             padding: 15px;
             background: var(--content-bg);
+            border-radius: 0 10px 10px 10px;
         }
     </style>
 </head>
 
 <body>
+
+<div class="header">
+    &#128294;
+    Dmx Web Player
+</div>
 
 <div class="tabs">
     <a href="/playback" class="tab {% if active == 'playback' %}active{% endif %}">Playback</a>
