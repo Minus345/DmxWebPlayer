@@ -87,20 +87,45 @@
         }
     </style>
 
-    <div class="scene-grid">
-        {% for (id, name) in sceneList %}
-            <form action="/playback" method="POST">
-                {% if active == name %}
-                    <button class="scene-button" type="submit" name="start" value="{{ id }}">
-                        {{ name }}
-                    </button>
-                {% else %}
-                    <button class="scene-button" type="submit" name="start" value="{{ id }}">
-                        {{ name }}
-                    </button>
-                {% endif %}
-            </form>
-        {% endfor %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"
+            integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA=="
+            crossorigin="anonymous"
+    ></script>
+    <script type="text/javascript" charset="utf-8">
+        var socket = io();
+        socket.on('connect', function () {
+            socket.emit('a', {data: 'I\'m connected!'});
+        });
+
+        socket.on('init_scenes', function (data) {
+            console.log(data);
+            const scenes = data.scenes;
+            const grid = document.getElementById('grid');
+
+            scenes.forEach(scene => {
+                const id = scene[0];
+                const name = scene[1];
+
+                // <form>
+                const form = document.createElement("form");
+                form.action = "/playback";
+                form.method = "POST";
+
+                // <button>
+                const btn = document.createElement("button");
+                btn.className = "scene-button";
+                btn.type = "submit";
+                btn.name = "start";
+                btn.value = id;
+                btn.textContent = name;
+
+                form.appendChild(btn);
+                grid.appendChild(form);
+            });
+        });
+    </script>
+
+    <div class="scene-grid" id="grid">
     </div>
 
     <div class="fixed-stop-container">

@@ -1,11 +1,13 @@
+import json
 import os
 import signal
-from asyncio import log
 
 from flask import Flask, request
 from flask import render_template
+from flask_socketio import SocketIO
 
 import Dmx
+import db
 
 app = Flask(__name__, instance_relative_config=True)
 # create and configure the app
@@ -13,15 +15,14 @@ app.config.from_mapping(
     SECRET_KEY='dev',
     DATABASE=os.path.join(app.instance_path, 'flaskr.sqlite'),
 )
+# configure websocket
+socketio = SocketIO(app)
 # ensure the instance folder exists
 os.makedirs(app.instance_path, exist_ok=True)
-import db
-
+# setup db
 db.init_app(app)
-
-signal.signal(signal.SIGCHLD, signal.SIG_IGN)
-
 # start Recording and Playback Processes
+signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 Dmx.startBackgroundProcesses(app.config['DATABASE'])
 
 
@@ -67,4 +68,18 @@ def playback():
         if stop is not None:
             Dmx.stopPlayer()
 
-    return render_template('playback.html', curRecording=Dmx.getCurrantRecording(db.get_db()), sceneList=Dmx.getCurrantScenes(db.get_db()), log=logging)
+    return render_template('playback.html')
+
+
+@socketio.on('a')
+def handle_message(data):
+    print('received message: ' + str(data))
+
+
+@socketio.on('connect')
+def handle_connect():
+    socketio.emit('init_scenes', {"scenes": Dmx.getCurrantScenes(db.get_db())})
+
+
+if __name__ == '__main__':
+    socketio.run(app)
