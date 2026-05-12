@@ -92,49 +92,70 @@
             crossorigin="anonymous"
     ></script>
     <script type="text/javascript" charset="utf-8">
-        var socket = io();
-        socket.on('connect', function () {
-            socket.emit('a', {data: 'I\'m connected!'});
-        });
+        const socket = io();
+        let lastActive = 0;
 
         socket.on('init_scenes', function (data) {
-            console.log(data);
+            //scenes buttons
             const scenes = data.scenes;
             const grid = document.getElementById('grid');
-
             scenes.forEach(scene => {
                 const id = scene[0];
                 const name = scene[1];
 
-                // <form>
-                const form = document.createElement("form");
-                form.action = "/playback";
-                form.method = "POST";
-
-                // <button>
                 const btn = document.createElement("button");
                 btn.className = "scene-button";
-                btn.type = "submit";
+                btn.type = "button";
                 btn.name = "start";
-                btn.value = id;
+                btn.id = id;
                 btn.textContent = name;
+                btn.onclick = function () {
+                    socket.emit('start', id)
+                }
 
-                form.appendChild(btn);
-                grid.appendChild(form);
+                grid.appendChild(btn);
             });
+
+            //stop button
+            const stopButtonPlacement = document.getElementById("fixed-stop-container")
+            const stopButton = document.createElement("button");
+            stopButton.className = "stop-button";
+            stopButton.type = "button";
+            stopButton.name = "stop";
+            stopButton.textContent = "Stop";
+            stopButton.onclick = function () {
+                socket.emit('start', -1)
+            }
+            stopButtonPlacement.appendChild(stopButton);
         });
+
+        /**
+         * highlight active button
+         * @param {number} sceneId
+         */
+        socket.on('active', function (sceneId) {
+            console.log(sceneId.type);
+            // sceneID == -1 => stop scene activated
+            // bei sop scene no active scene
+            if (sceneId !== -1) {
+                const newActive = document.getElementById(sceneId)
+                newActive.className = "scene-button-active"
+            }
+
+            // if no scene was running at startup, lastActive = 0
+            // las scene was stop, lastActive = -1
+            if (lastActive !== 0 && lastActive !== -1) {
+                const oldActive = document.getElementById(lastActive)
+                oldActive.className = "scene-button"
+            }
+            lastActive = sceneId
+        })
     </script>
 
     <div class="scene-grid" id="grid">
     </div>
 
-    <div class="fixed-stop-container">
-        <form action="/playback" method="POST">
-            <button class="stop-button" type="submit" name="stop" value="stop">STOP</button>
-        </form>
+    <div class="fixed-stop-container" id="fixed-stop-container">
     </div>
-
-    <p style="margin-top: 30px">Log:</p>
-    {{ log }}
 
 {% endblock %}

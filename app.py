@@ -1,10 +1,9 @@
-import json
 import os
 import signal
 
 from flask import Flask, request
 from flask import render_template
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, emit
 
 import Dmx
 import db
@@ -58,27 +57,23 @@ def edit():
 
 @app.route('/playback', methods=['GET', 'POST'])
 def playback():
-    logging = ""
-    if request.method == 'POST':
-        start = request.form.get('start')
-        stop = request.form.get('stop')
-        if start is not None:
-            logging = Dmx.startPlayer(int(start))
-
-        if stop is not None:
-            Dmx.stopPlayer()
-
     return render_template('playback.html')
 
 
-@socketio.on('a')
-def handle_message(data):
-    print('received message: ' + str(data))
+@socketio.on('start')
+def startScene(data):
+    print('start: ' + str(data))
+    if data == -1:
+        Dmx.stopPlayer()
+    else:
+        Dmx.startPlayer(int(data))
+
+    emit('active', data, broadcast=True)
 
 
 @socketio.on('connect')
 def handle_connect():
-    socketio.emit('init_scenes', {"scenes": Dmx.getCurrantScenes(db.get_db())})
+    emit('init_scenes', {"scenes": Dmx.getCurrantScenes(db.get_db())})
 
 
 if __name__ == '__main__':
