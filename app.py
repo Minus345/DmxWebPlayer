@@ -27,11 +27,40 @@ Dmx.startBackgroundProcesses(app.config['DATABASE'])
 
 @app.route('/')
 def index():
-    return render_template('playback.html', curRecording=Dmx.getCurrantRecording(db.get_db()), sceneList=Dmx.getCurrantScenes(db.get_db()), log="started ...")
+    return render_template('playback.html')
 
 
 @app.route('/edit', methods=['GET', 'POST'])
 def edit():
+    return render_template('edit.html')
+
+@socketio.on('connect', namespace='/edit')
+def handle_connect():
+    emit('init_scenes', {"scenes": Dmx.getCurrantScenes(db.get_db())})
+
+
+@socketio.on('startRecording', namespace='/edit')
+def startScene(data):
+    print('start: ' + str(data))
+    pass
+
+@socketio.on('stopRecording', namespace='/edit')
+def stopScene():
+    print('stop')
+    pass
+
+@socketio.on('edit', namespace='/edit')
+def editScene(data):
+    print('edit: ' + str(data))
+    pass
+
+@socketio.on('delete', namespace='/edit')
+def deleteScene(data):
+    print('delete: ' + str(data))
+    pass
+
+'''
+
     if request.method == 'POST':
         if request.form.get('sceneName') is not None:
             sceneName = request.form.get('sceneName')
@@ -52,15 +81,15 @@ def edit():
         elif request.form.get('delete') is not None:
             Dmx.deleteScene(db.get_db(), int(request.form.get('delete')))
 
-    return render_template('edit.html', curRecording=Dmx.getCurrantRecording(db.get_db()), sceneList=Dmx.getCurrantScenes(db.get_db()))
+'''
 
 
-@app.route('/playback', methods=['GET', 'POST'])
+@app.route('/playback')
 def playback():
     return render_template('playback.html')
 
 
-@socketio.on('start')
+@socketio.on('start', namespace='/playback')
 def startScene(data):
     print('start: ' + str(data))
     if data == -1:
@@ -71,7 +100,7 @@ def startScene(data):
     emit('active', data, broadcast=True)
 
 
-@socketio.on('connect')
+@socketio.on('connect', namespace='/playback')
 def handle_connect():
     emit('init_scenes', {"scenes": Dmx.getCurrantScenes(db.get_db())})
 

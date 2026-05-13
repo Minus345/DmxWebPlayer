@@ -68,60 +68,132 @@
         .slider.round:before {
             border-radius: 50%;
         }
+
+        table, th, td {
+            border: 1px solid #ffffff;
+            border-collapse: collapse;
+        }
+
+        #startRecordingBtn {
+            background-color: #2ecc71; /* Grün */
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #startRecordingBtn:hover {
+            background-color: #27ae60;
+        }
+
+        #stopRecordingBtn {
+            background-color: #e74c3c; /* Rot */
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #stopRecordingBtn:hover {
+            background-color: #c0392b;
+        }
+
     </style>
 
-    <form action="/edit" method="POST">
-        <label for="sceneRecording">New Scene Name:</label>
-        <input type="text" id="sceneRecording" name="sceneName">
+    <script type="text/javascript" charset="utf-8">
+        const socket = io("/edit");
+        document.addEventListener("DOMContentLoaded", () => {
+            const nameInput = document.getElementById("sceneRecording");
+            const staticInput = document.getElementById("staticSwitch");
 
-        <label for="static">Static:</label>
-        <label class="switch" id="static">
-            <input type="checkbox" name="static" value="True">
+            const startBtn = document.getElementById("startRecordingBtn");
+            const stopBtn = document.getElementById("stopRecordingBtn");
+
+            // Start Recording
+            startBtn.addEventListener("click", () => {
+                const payload = {
+                    sceneName: nameInput.value,
+                    isStatic: staticInput.checked
+                };
+
+                socket.emit("startRecording", payload);
+            });
+
+            // Stop Recording
+            stopBtn.addEventListener("click", () => {
+                socket.emit("stopRecording");
+            });
+
+        });
+
+        socket.on('init_scenes', function (data) {
+            const scenes = data.scenes;
+            const table = document.getElementById('table');
+
+            scenes.forEach(scene => {
+                const id = scene[0];
+                const name = scene[1];
+
+                //edit button
+                const editButton = document.createElement("button");
+                editButton.type = "button";
+                editButton.textContent = "Edit";
+                editButton.onclick = function () {
+                    socket.emit('edit', id)
+                }
+
+                //delete button
+                const deleteButton = document.createElement("button");
+                deleteButton.type = "button";
+                deleteButton.textContent = "Delete";
+                deleteButton.onclick = function () {
+                    if (confirm('Are you sure?')) {
+                        socket.emit('delete', id)
+                    }
+                }
+
+                const row = table.insertRow(id);
+                const cellId = row.insertCell()
+                const cellName = row.insertCell()
+                const cellAction = row.insertCell()
+                cellId.textContent = id;
+                cellName.textContent = name;
+                cellAction.appendChild(editButton)
+                cellAction.appendChild(deleteButton)
+            });
+        });
+    </script>
+
+
+    <div id="recording">
+        <label for="sceneRecording">New Scene Name:</label>
+        <input type="text" id="sceneRecording">
+
+        <label for="staticSwitch">Static:</label>
+        <label class="switch">
+            <input type="checkbox" id="staticSwitch" value="True">
             <span class="slider round"></span>
         </label>
-
-        <input type="submit" value="Start Recording">
-    </form>
-    <form action="/edit" method="POST">
-        <label for="sceneRecordingStop">Currently Recording: {{ curRecording }}</label>
-        <button type="submit" name="status" value="stop">Stop Recording</button>
-    </form>
+        <br>
+        <button id="startRecordingBtn">Start Recording</button>
+        <br>
+        <button id="stopRecordingBtn">Stop Recording</button>
+    </div>
 
     <hr>
 
-    <style>
-        table, th, td {
-            border: 1px solid black;
-            border-collapse: collapse;
-        }
-    </style>
-
-    <script>
-        function clicked(e) {
-            if (!confirm('Are you sure?')) {
-                e.preventDefault();
-            }
-        }
-    </script>
-
-    <table>
+    <table id="table">
         <tr>
             <th>Scene ID</th>
             <th>Scene Name</th>
             <th>Action</th>
         </tr>
-        {% for (id,name) in sceneList %}
-            <tr>
-                <td>{{ id }}</td>
-                <td>{{ name }}</td>
-                <td>
-                    <form action="/edit" method="POST">
-                        <button type="submit" name="edit" value="{{ id }}">Edit</button>
-                        <button type="submit" onclick="clicked(event)" name="delete" value="{{ id }}">Delete</button>
-                    </form>
-                </td>
-            </tr>
-        {% endfor %}
     </table>
 
 {% endblock %}
